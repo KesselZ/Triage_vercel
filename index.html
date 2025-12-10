@@ -19,8 +19,10 @@
             --sar: env(safe-area-inset-right);
         }
         .chat-container {
-            height: calc(100vh - 180px - var(--sab, 0px));
+            flex: 1;
+            overflow-y: auto;
             background: linear-gradient(180deg, #f0fdfa 0%, #f8fafc 100%);
+            min-height: 0; /* 确保flex子元素可以收缩 */
         }
         /* 移动端底部安全区域 */
         .safe-bottom {
@@ -76,7 +78,7 @@
     </style>
 </head>
 <body class="bg-gradient-to-br from-teal-50 to-cyan-50 text-gray-800 font-sans">
-    <div id="app" class="w-full md:max-w-2xl mx-auto h-screen flex flex-col md:shadow-2xl bg-white relative overflow-hidden">
+    <div id="app" class="w-full md:max-w-2xl mx-auto h-[100dvh] flex flex-col md:shadow-2xl bg-white relative overflow-hidden">
         
         <!-- Header -->
         <header class="bg-gradient-to-r from-teal-500 via-teal-400 to-cyan-500 text-white p-3 md:p-4 shadow-lg relative overflow-hidden">
@@ -272,7 +274,7 @@
         </main>
 
         <!-- Input Area -->
-        <footer class="bg-white p-3 md:p-4 border-t border-gray-100 shadow-lg safe-bottom">
+        <footer class="bg-white p-3 md:p-4 border-t border-gray-100 shadow-lg flex-shrink-0">
             <!-- 显示当前AI消息的选项提交按钮 -->
             <div v-if="hasCurrentOptions" class="mb-3">
                 <div class="flex items-center justify-between bg-teal-50 p-3 rounded-xl">
