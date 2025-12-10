@@ -6,8 +6,12 @@ from pydantic import BaseModel
 from typing import List
 import uvicorn
 import os
+from dotenv import load_dotenv
 
-from backend.ai_client import get_next_question, generate_diagnosis
+# 加载环境变量
+load_dotenv()
+
+from api.utils.ai_client import get_next_question, generate_diagnosis
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -29,9 +33,9 @@ app.mount("/static", StaticFiles(directory=BASE_DIR, html=False), name="static")
 @app.get("/")
 async def serve_index():
     """返回前端首页 index.html"""
-    index_path = os.path.join(BASE_DIR, "index.html")
+    index_path = os.path.join(BASE_DIR, "public", "index.html")
     if not os.path.exists(index_path):
-        raise HTTPException(status_code=404, detail="index.html not found")
+        raise HTTPException(status_code=404, detail="public/index.html not found")
     return FileResponse(index_path)
 
 
