@@ -30,6 +30,3 @@ async def chat_diagnose(request: ChatRequest):
     """诊断接口"""
     result = await generate_diagnosis(request.history)
     return result
-
-# Vercel需要这个导出
-handler = app
