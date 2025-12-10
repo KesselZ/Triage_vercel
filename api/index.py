@@ -19,13 +19,13 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     history: List[Dict[str, str]]
 
-@app.post("/chat/next")
+@app.post("/api/chat/next")
 async def chat_next(request: ChatRequest):
     """问诊接口"""
     result = await get_next_question(request.history)
     return result
 
-@app.post("/chat/diagnose")
+@app.post("/api/chat/diagnose")
 async def chat_diagnose(request: ChatRequest):
     """诊断接口"""
     result = await generate_diagnosis(request.history)
