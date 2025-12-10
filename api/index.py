@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any
 
-from utils.ai_client import get_next_question, generate_diagnosis
+from .utils.ai_client import get_next_question, generate_diagnosis
 
 app = FastAPI()
 
