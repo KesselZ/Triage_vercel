@@ -33,7 +33,9 @@ async def serve_index():
 
 
 class ChatRequest(BaseModel):
-    history: List[Dict[str, str]]
+    # history 中的每一项至少包含 role/content，但前端还会带上 options、selectedOptions 等字段
+    # 因此前端发来的是 Dict[str, Any]，不能用 Dict[str, str] 否则会导致 422 验证失败
+    history: List[Dict[str, Any]]
 
 @app.post("/api/chat/next")
 async def chat_next(request: ChatRequest):
