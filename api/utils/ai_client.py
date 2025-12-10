@@ -1,16 +1,55 @@
 import os
+import json
 from typing import List, Dict, Any
-from openai import AsyncOpenAI
+
+import httpx
 
 # 模型配置：问诊阶段和诊断阶段使用不同模型
 CHAT_MODEL_NAME = "gpt-5.1"  # 问诊阶段模型
 DIAGNOSIS_MODEL_NAME = "grok-4-1-fast-reasoning"  # 诊断阶段模型
 
-# 初始化OpenAI客户端
-client = AsyncOpenAI(
-    api_key=os.getenv("UNIAPI_API_KEY"),
-    base_url=os.getenv("UNIAPI_BASE_URL", "https://hk.uniapi.io/v1")
-)
+
+API_KEY = os.getenv("UNIAPI_API_KEY")
+BASE_URL = os.getenv("UNIAPI_BASE_URL", "https://hk.uniapi.io/v1").rstrip("/")
+
+
+async def _create_chat_completion(
+    *,
+    model: str,
+    messages: List[Dict[str, str]],
+    temperature: float = 0.3,
+    max_tokens: int | None = None,
+    response_format: Dict[str, Any] | None = None,
+) -> str:
+    """调用 UniAPI(OpenAI 兼容) 的 /chat/completions 接口，返回 content 字符串。"""
+
+    if not API_KEY:
+        raise RuntimeError("UNIAPI_API_KEY is not set in environment variables")
+
+    url = f"{BASE_URL}/chat/completions"
+
+    payload: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    if response_format is not None:
+        payload["response_format"] = response_format
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+
+    data = resp.json()
+    # 兼容 OpenAI 风格的返回结构
+    return data["choices"][0]["message"]["content"].strip()
 
 async def get_next_question(history: List[Dict[str, str]]) -> Dict[str, Any]:
     """
@@ -44,16 +83,14 @@ async def get_next_question(history: List[Dict[str, str]]) -> Dict[str, Any]:
     messages.extend(history)
 
     try:
-        response = await client.chat.completions.create(
+        content = await _create_chat_completion(
             model=CHAT_MODEL_NAME,
             messages=messages,
             temperature=0.3,
             max_tokens=1000,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
-        content = response.choices[0].message.content.strip()
-        
-        import json
+
         result = json.loads(content)
         
         if "status" in result and result["status"] == "stop":
@@ -112,14 +149,13 @@ reasoning_steps说明：
     messages.extend(history)
 
     try:
-        response = await client.chat.completions.create(
+        content = await _create_chat_completion(
             model=DIAGNOSIS_MODEL_NAME,
             messages=messages,
             temperature=0.3,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
-        content = response.choices[0].message.content
-        import json
+
         return json.loads(content)
     except Exception as e:
         print(f"Error generating diagnosis: {e}")
