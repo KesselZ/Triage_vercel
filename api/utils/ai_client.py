@@ -4,10 +4,6 @@ from typing import List, Dict, Any
 
 import httpx
 
-# 模型配置：统一使用 Grok 4.1 Fast
-CHAT_MODEL_NAME = "grok-4-1-fast-non-reasoning"  # 问诊阶段模型
-DIAGNOSIS_MODEL_NAME = "grok-4-1-fast-non-reasoning"  # 诊断阶段模型
-
 
 API_KEY = os.getenv("UNIAPI_API_KEY")
 BASE_URL = os.getenv("UNIAPI_BASE_URL", "https://hk.uniapi.io/v1").rstrip("/")
@@ -51,7 +47,7 @@ async def _create_chat_completion(
     # 兼容 OpenAI 风格的返回结构
     return data["choices"][0]["message"]["content"].strip()
 
-async def get_next_question(history: List[Dict[str, str]]) -> Dict[str, Any]:
+async def get_next_question(history: List[Dict[str, str]], model: str = "grok-4-1-fast-non-reasoning") -> Dict[str, Any]:
     """
     根据对话历史，决定是继续提问还是停止。
     """
@@ -82,7 +78,7 @@ async def get_next_question(history: List[Dict[str, str]]) -> Dict[str, Any]:
 
     try:
         content = await _create_chat_completion(
-            model=CHAT_MODEL_NAME,
+            model=model,
             messages=messages,
             temperature=0.3,
             max_tokens=1000,
@@ -102,7 +98,7 @@ async def get_next_question(history: List[Dict[str, str]]) -> Dict[str, Any]:
         print(f"Error calling AI: {e}")
         return {"status": "error", "message": str(e)}
 
-async def generate_diagnosis(history: List[Dict[str, str]]) -> Dict[str, Any]:
+async def generate_diagnosis(history: List[Dict[str, str]], model: str = "grok-4-1-fast-non-reasoning") -> Dict[str, Any]:
     """
     根据完整对话历史生成分诊报告。
     """
@@ -183,7 +179,7 @@ sankey_data说明：
 
     try:
         content = await _create_chat_completion(
-            model=DIAGNOSIS_MODEL_NAME,
+            model=model,
             messages=messages,
             temperature=0.3,
             response_format={"type": "json_object"},
