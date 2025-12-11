@@ -5,8 +5,8 @@ from typing import List, Dict, Any
 import httpx
 
 # 模型配置：统一使用 Grok 4.1 Fast
-CHAT_MODEL_NAME = "grok-4-1-fast"  # 问诊阶段模型
-DIAGNOSIS_MODEL_NAME = "grok-4-1-fast"  # 诊断阶段模型
+CHAT_MODEL_NAME = "grok-4-1-fast-non-reasoning"  # 问诊阶段模型
+DIAGNOSIS_MODEL_NAME = "grok-4-1-fast-non-reasoning"  # 诊断阶段模型
 
 
 API_KEY = os.getenv("UNIAPI_API_KEY")
@@ -68,9 +68,7 @@ async def get_next_question(history: List[Dict[str, str]]) -> Dict[str, Any]:
 6. 严禁在此时给出诊断结果，只负责提问。
 7. 语气要求：
    - 用温暖关怀的语气，像医生关心患者一样交流
-   - 多用理解和共情的表达，让患者感到被重视
-   - 语言自然流畅，避免机械化和模板化
-   - 可以适当使用一些温和的语气词，但不要过度
+
 
 输出格式：
 - 如果需要继续提问且提供选项：{"question": "问题内容", "options": ["选项1", "选项2", "选项3"]}
@@ -134,7 +132,29 @@ async def generate_diagnosis(history: List[Dict[str, str]]) -> Dict[str, Any]:
             "title": "诊断结论",
             "content": "最终判断和建议科室"
         }
-    ]
+    ],
+    "sankey_data": {
+        "nodes": [
+            {"id": "symptom_1", "name": "症状名称", "layer": 0, "category": "症状", "color": "#ec4899"},
+            {"id": "symptom_2", "name": "症状名称", "layer": 0, "category": "症状", "color": "#ec4899"},
+            {"id": "symptom_3", "name": "症状名称", "layer": 0, "category": "症状", "color": "#ec4899"},
+            {"id": "analysis_1", "name": "症状模式", "layer": 1, "category": "分析", "color": "#ec4899"},
+            {"id": "analysis_2", "name": "症状模式", "layer": 1, "category": "分析", "color": "#ec4899"},
+            {"id": "analysis_3", "name": "症状模式", "layer": 1, "category": "分析", "color": "#ec4899"},
+            {"id": "condition_1", "name": "疾病1", "layer": 2, "category": "疑似患病", "color": "#10b981"},
+            {"id": "condition_2", "name": "疾病2", "layer": 2, "category": "疑似患病", "color": "#10b981"}
+        ],
+        "links": [
+            {"source": "symptom_1", "target": "analysis_1", "value": 0.8},
+            {"source": "symptom_1", "target": "analysis_2", "value": 0.7},
+            {"source": "symptom_2", "target": "analysis_2", "value": 0.9},
+            {"source": "symptom_3", "target": "analysis_3", "value": 0.9},
+            {"source": "analysis_1", "target": "condition_1", "value": 0.8},
+            {"source": "analysis_2", "target": "condition_1", "value": 0.7},
+            {"source": "analysis_2", "target": "condition_2", "value": 0.6},
+            {"source": "analysis_3", "target": "condition_2", "value": 0.5}
+        ]
+    }
 }
 
 reasoning_steps说明：
@@ -143,6 +163,19 @@ reasoning_steps说明：
 - title: 步骤标题
 - content: 该步骤的具体内容
 - 通常3-5个步骤即可，按逻辑顺序排列
+
+sankey_data说明：
+- nodes: 桑基图节点，包含以下字段：
+  * id: 唯一标识符
+  * name: 节点显示名称
+  * layer: 层级（0=主诉症状，1=分析层，2=疑似患病）
+  * category: 节点分类（症状/发病时间/部位/分析/时间分析/部位分析/疑似患病）
+  * color: 节点颜色（症状用#ec4899粉色，发病时间用#3b82f6蓝色，部位用#f59e0b橙色，分析层继承对应症状颜色，疑似患病用#10b981绿色）
+- links: 节点间的连接，value表示关联强度（0-1之间）
+- 确保每个节点的id在nodes中唯一，links中的source和target引用nodes中的id
+- 症状应该按类型分类：具体症状描述、发病时间、部位等
+- 分析层应该对症状进行提炼和归纳，形成医学术语
+- 一个症状可以连接到多个分析结果，一个分析结果可以连接多个疑似疾病
 """
 
     messages = [{"role": "system", "content": system_prompt}]
