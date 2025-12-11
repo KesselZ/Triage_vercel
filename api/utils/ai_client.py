@@ -4,9 +4,9 @@ from typing import List, Dict, Any
 
 import httpx
 
-# 模型配置：问诊阶段和诊断阶段使用不同模型
-CHAT_MODEL_NAME = "gpt-5.1"  # 问诊阶段模型
-DIAGNOSIS_MODEL_NAME = "grok-4-1-fast-reasoning"  # 诊断阶段模型
+# 模型配置：统一使用 Grok 4.1 Fast
+CHAT_MODEL_NAME = "grok-4-1-fast"  # 问诊阶段模型
+DIAGNOSIS_MODEL_NAME = "grok-4-1-fast"  # 诊断阶段模型
 
 
 API_KEY = os.getenv("UNIAPI_API_KEY")
