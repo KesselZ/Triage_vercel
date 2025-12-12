@@ -217,7 +217,7 @@
                 <div v-else class="flex justify-end max-w-[90%] md:max-w-[85%]">
                     <!-- 消息气泡 -->
                     <div class="bg-gradient-to-r from-yellow-25 to-amber-25 text-gray-700 p-3 md:p-4 rounded-2xl rounded-tr-sm shadow-md flex-1 border border-yellow-100" style="background: linear-gradient(to right, #fefce8, #fffbeb);">
-                        <p class="leading-relaxed text-sm md:text-base">{{ msg.content }}</p>
+                        <p class="leading-relaxed text-sm md:text-base">{{ msg.displayText || msg.content }}</p>
                     </div>
                 </div>
             </div>
@@ -339,26 +339,78 @@
             </div>
             
             <div class="flex space-x-2 md:space-x-3" v-if="!diagnosis">
-                <div class="flex-1 relative">
+                <button 
+                    v-if="!inputMessage.trim() || isVoiceMode"
+                    @click="handleCamera" 
+                    class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2.5 md:p-3 rounded-xl transition flex items-center justify-center"
+                    :disabled="isLoading"
+                >
+                    <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </button>
+                
+                <!-- 语音模式：按下说话按钮 -->
+                <div v-if="isVoiceMode" class="flex-1 relative">
+                    <button 
+                        @mousedown="startRecording"
+                        @mouseup="stopRecording"
+                        @mouseleave="stopRecording"
+                        @touchstart="startRecording"
+                        @touchend="stopRecording"
+                        class="w-full border-2 border-purple-300 rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base focus:outline-none transition bg-purple-50 hover:bg-purple-100 active:bg-purple-200 active:scale-95 flex items-center justify-center space-x-2"
+                        :disabled="isLoading"
+                    >
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                        <span class="text-purple-700 font-medium">{{ isRecording ? '正在录音...' : '按下说话' }}</span>
+                    </button>
+                </div>
+                
+                <!-- 键盘模式：输入框 -->
+                <div v-else class="flex-1 relative">
                     <input 
                         v-model="inputMessage" 
                         @keyup.enter="sendMessage"
                         type="text" 
                         placeholder="请描述您的症状..." 
-                        class="w-full border-2 border-gray-200 rounded-xl px-3 md:px-4 py-2.5 md:py-3 pr-10 md:pr-12 text-sm md:text-base focus:outline-none focus:border-purple-600 transition input-glow bg-gray-50 focus:bg-white"
+                        class="w-full border-2 border-gray-200 rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base focus:outline-none focus:border-purple-600 transition input-glow bg-gray-50 focus:bg-white"
+                        :class="inputMessage.trim() ? 'pr-12 md:pr-14' : 'pr-2 md:pr-2'"
                         :disabled="isLoading"
                     >
-                    <div class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                    </div>
                 </div>
+                
+                <div v-if="!inputMessage.trim() || isVoiceMode" class="flex space-x-1">
+                    <!-- 语音模式显示键盘按钮，键盘模式显示语音按钮 -->
+                    <button 
+                        v-if="isVoiceMode"
+                        @click="toggleVoiceMode" 
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2.5 md:p-3 rounded-xl transition flex items-center justify-center"
+                        :disabled="isLoading"
+                    >
+                        <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </button>
+                    <button 
+                        v-else
+                        @click="toggleVoiceMode" 
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2.5 md:p-3 rounded-xl transition flex items-center justify-center"
+                        :disabled="isLoading"
+                    >
+                        <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                    </button>
+                    <button 
+                        @click="handleAdd" 
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2.5 md:p-3 rounded-xl transition flex items-center justify-center"
+                        :disabled="isLoading"
+                    >
+                        <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    </button>
+                </div>
+                
                 <button 
+                    v-if="inputMessage.trim() && !isVoiceMode"
                     @click="sendMessage" 
-                    class="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-medium text-sm md:text-base transition disabled:opacity-50 disabled:cursor-not-allowed btn-hover flex items-center space-x-1 md:space-x-2"
+                    class="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white p-2.5 md:p-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed btn-hover flex items-center justify-center"
                     :disabled="!inputMessage.trim() || isLoading"
                 >
-                    <span>发送</span>
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                    <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
                 </button>
             </div>
             <div v-else class="text-center">
@@ -379,6 +431,11 @@
                 const inputMessage = ref('');
                 const isLoading = ref(false);
                 const diagnosis = ref(null);
+                const isVoiceMode = ref(false); // 新增语音模式状态
+                const isRecording = ref(false); // 录音状态
+                const isTTSEnabled = ref(true); // TTS开关状态
+                const mediaRecorder = ref(null); // MediaRecorder实例
+                const audioChunks = ref([]); // 音频数据块
                 
                 // 模型选择状态
                 let defaultModel = 'grok-4-1-fast-non-reasoning';
@@ -497,18 +554,28 @@
                                 options: data.options || [],
                                 selectedOptions: []
                             };
-                            history.value.push(aiMessage);
+                            
+                            // 使用协调的TTS显示函数
+                            await displayAIMessageWithTTS(aiMessage);
                         } else if (data.status === 'stop') {
                             // AI 决定停止提问，开始诊断
                             await generateDiagnosis();
                         } else {
                             console.error('API Error:', data.message);
-                            history.value.push({ role: 'assistant', content: '抱歉，系统出错了，请重试。' });
+                            const errorMessage = '抱歉，系统出错了，请重试。';
+                            const errorAIMessage = { role: 'assistant', content: errorMessage };
+                            
+                            // 使用协调的TTS显示函数显示错误消息
+                            await displayAIMessageWithTTS(errorAIMessage);
                         }
 
                     } catch (error) {
                         console.error('Network Error:', error);
-                        history.value.push({ role: 'assistant', content: '网络连接失败，请检查您的网络。' });
+                        const errorMessage = '网络连接失败，请检查您的网络。';
+                        const errorAIMessage = { role: 'assistant', content: errorMessage };
+                        
+                        // 使用协调的TTS显示函数显示错误消息
+                        await displayAIMessageWithTTS(errorAIMessage);
                     } finally {
                         isLoading.value = false;
                         await scrollToBottom();
@@ -563,12 +630,18 @@
                                 options: data.options || [],
                                 selectedOptions: []
                             };
-                            history.value.push(aiMessage);
+                            
+                            // 使用协调的TTS显示函数
+                            await displayAIMessageWithTTS(aiMessage);
                         } else if (data.status === 'stop') {
                             await generateDiagnosis();
                         } else {
                             console.error('API Error:', data.message);
-                            history.value.push({ role: 'assistant', content: '抱歉，系统出错了，请重试。' });
+                            const errorMessage = '抱歉，系统出错了，请重试。';
+                            const errorAIMessage = { role: 'assistant', content: errorMessage };
+                            
+                            // 使用协调的TTS显示函数显示错误消息
+                            await displayAIMessageWithTTS(errorAIMessage);
                         }
 
                     } catch (error) {
@@ -653,6 +726,322 @@
                         diagnosis.value = null;
                         inputMessage.value = '';
                         isLoading.value = false;
+                    }
+                };
+
+                // 新增按钮处理函数
+                const handleCamera = () => {
+                    // TODO: 实现相机功能
+                    console.log('相机功能待实现');
+                };
+
+                const toggleVoiceMode = () => {
+                    isVoiceMode.value = !isVoiceMode.value;
+                    if (isVoiceMode.value) {
+                        // 进入语音模式，清空输入框
+                        inputMessage.value = '';
+                    }
+                };
+
+                const startRecording = async () => {
+                    if (isRecording.value) return;
+                    
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
+                            audio: true
+                        });
+                        
+                        mediaRecorder.value = new MediaRecorder(stream, {
+                            mimeType: 'audio/webm;codecs=opus'
+                        });
+                        
+                        audioChunks.value = [];
+                        mediaRecorder.value.ondataavailable = (event) => {
+                            if (event.data.size > 0) {
+                                audioChunks.value.push(event.data);
+                            }
+                        };
+                        
+                        mediaRecorder.value.start();
+                        isRecording.value = true;
+                        window.recordingStartTime = Date.now();
+                        console.log('开始录音');
+                        
+                    } catch (error) {
+                        console.error('无法访问麦克风:', error);
+                        alert('无法访问麦克风，请检查权限设置');
+                    }
+                };
+
+                const stopRecording = () => {
+                    if (isRecording.value && mediaRecorder.value) {
+                        // 立即更新UI状态，避免延迟
+                        isRecording.value = false;
+                        
+                        // 异步停止录音，避免阻塞UI
+                        setTimeout(() => {
+                            mediaRecorder.value.stop();
+                            console.log('停止录音');
+                        }, 0);
+
+                        // 监听录音停止事件
+                        mediaRecorder.value.onstop = () => {
+                            // 停止所有音轨（立即清理，避免验证失败时麦克风仍活跃）
+                            if (mediaRecorder.value && mediaRecorder.value.stream) {
+                                mediaRecorder.value.stream.getTracks().forEach(track => track.stop());
+                            }
+                            
+                            // 创建音频Blob
+                            const recordingDuration = Date.now() - window.recordingStartTime;
+                            const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm;codecs=opus' });
+                            console.log('录音完成，音频大小:', audioBlob.size, 'bytes, 时长:', recordingDuration, 'ms');
+                            
+                            // 静默验证，不打扰用户
+                            if (audioBlob.size < 1000) {
+                                console.log('音频文件过小，忽略本次录音');
+                                mediaRecorder.value = null;
+                                audioChunks.value = [];
+                                return;
+                            }
+                            
+                            // 保存音频数据供STT使用
+                            window.lastAudioBlob = audioBlob;
+                            window.lastRecordingDuration = recordingDuration;
+                            
+                            // 清理状态
+                            mediaRecorder.value = null;
+                            audioChunks.value = [];
+                            
+                            // 触发STT处理
+                            processVoiceInput();
+                        };
+                    }
+                };
+
+                const handleVoice = () => {
+                    // 这个函数现在由 toggleVoiceMode 替代
+                    toggleVoiceMode();
+                };
+
+                const handleAdd = () => {
+                    // TODO: 实现添加功能（图片上传等）
+                    console.log('添加功能待实现');
+                };
+
+                // 处理语音输入
+                const processVoiceInput = async () => {
+                    if (!window.lastAudioBlob) {
+                        console.log('🎤 [语音处理] 没有可用的音频数据');
+                        return;
+                    }
+
+                    console.log('🎤 [语音处理] 开始处理语音输入...');
+                    console.log('🎤 [语音处理] 音频文件大小:', window.lastAudioBlob.size, 'bytes');
+                    
+                    // 调用STT API将音频转换为文字
+                    console.log('🎤 [语音识别] 正在调用语音识别API...');
+                    const startTime = Date.now();
+                    
+                    let transcribedText = '';  // 修复变量作用域问题
+                    
+                    try {
+                        // 使用真实录音音频进行STT识别
+                        console.log('🎤 [语音识别] 使用录音音频进行语音识别');
+                        
+                        // 创建FormData发送录音音频文件
+                        const formData = new FormData();
+                        formData.append('file', window.lastAudioBlob, 'recording.webm');
+                        
+                        console.log('🎤 [语音识别] 准备发送录音音频到 /api/stt');
+                        
+                        const sttResponse = await fetch('/api/stt', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        console.log('🎤 [语音识别] 收到STT响应，状态:', sttResponse.status);
+                        
+                        if (!sttResponse.ok) {
+                            const errorText = await sttResponse.text();
+                            console.error('🎤 [语音识别] STT错误响应:', errorText);
+                            throw new Error(`STT API error: ${sttResponse.status}`);
+                        }
+                        
+                        const sttResult = await sttResponse.json();
+                        console.log('🎤 [语音识别] STT原始响应:', sttResult);
+                        
+                        transcribedText = sttResult.text || '';
+                        
+                        const sttDuration = Date.now() - startTime;
+                        console.log('🎤 [语音识别] 语音识别耗时:', sttDuration, 'ms');
+                        console.log('🎤 [语音识别] 识别到的输入内容是:', transcribedText);
+                        
+                        // 如果识别结果为空，显示提示但不中断流程
+                        if (!transcribedText.trim()) {
+                            console.log('🎤 [语音识别] 识别结果为空，使用占位符');
+                            transcribedText = '[语音识别为空]';
+                        }
+                        
+                    } catch (error) {
+                        console.error('🎤 [语音识别] STT调用失败:', error);
+                        // STT失败时使用占位符文本，避免完全中断用户体验
+                        transcribedText = '[语音识别失败]';
+                    }
+                    
+                    // 创建用户消息，包含显示文本和实际内容
+                    const voiceMessage = {
+                        role: 'user',
+                        content: transcribedText,  // 实际内容，用于对话
+                        displayText: '🎤 语音输入',  // 显示文本，用于UI
+                        isVoice: true  // 标记为语音消息
+                    };
+                    
+                    console.log('🎤 [语音处理] 创建语音消息，准备发送给AI...');
+                    
+                    // 添加到对话历史
+                    history.value.push(voiceMessage);
+                    await scrollToBottom();
+                    
+                    console.log('🎤 [AI对话] 正在等待AI回复...');
+                    
+                    // 继续AI对话流程
+                    isLoading.value = true;
+                    try {
+                        console.log('🎤 [AI对话] 发送请求到 /api/chat/next');
+                        const response = await fetch(`${API_BASE}/chat/next`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                history: history.value,
+                                model: selectedModel.value 
+                            })
+                        });
+                        
+                        console.log('🎤 [AI对话] 收到AI响应，正在处理...');
+                        const data = await response.json();
+
+                        if (data.status === 'continue') {
+                            console.log('🎤 [AI对话] AI回复状态: continue (继续提问)');
+                            // AI 继续提问，可能包含选项
+                            const aiMessage = {
+                                role: 'assistant',
+                                content: data.question || data.content || '',
+                                options: data.options || [],
+                                selectedOptions: []
+                            };
+                            
+                            console.log('🎤 [TTS处理] 正在等待回复内容转为语音...');
+                            // 使用协调的TTS显示函数
+                            await displayAIMessageWithTTS(aiMessage);
+                            console.log('🎤 [TTS处理] 语音播放完成');
+                        } else if (data.status === 'stop') {
+                            console.log('🎤 [AI对话] AI回复状态: stop (开始诊断)');
+                            // AI 决定停止提问，开始诊断
+                            await generateDiagnosis();
+                        } else {
+                            console.error('🎤 [AI对话] AI回复状态: error -', data.message);
+                            const errorMessage = '抱歉，系统出错了，请重试。';
+                            const errorAIMessage = { role: 'assistant', content: errorMessage };
+                            
+                            console.log('🎤 [TTS处理] 正在等待错误消息转为语音...');
+                            // 使用协调的TTS显示函数显示错误消息
+                            await displayAIMessageWithTTS(errorAIMessage);
+                        }
+
+                    } catch (error) {
+                        console.error('🎤 [AI对话] 网络错误:', error);
+                        const errorMessage = '网络连接失败，请检查您的网络。';
+                        const errorAIMessage = { role: 'assistant', content: errorMessage };
+                        
+                        console.log('🎤 [TTS处理] 正在等待错误消息转为语音...');
+                        // 使用协调的TTS显示函数显示错误消息
+                        await displayAIMessageWithTTS(errorAIMessage);
+                    } finally {
+                        isLoading.value = false;
+                        await scrollToBottom();
+                        console.log('🎤 [语音处理] 语音输入处理流程完成');
+                    }
+                };
+
+                // TTS功能：播放AI回复
+                const speakText = async (text) => {
+                    if (!isTTSEnabled.value || !text.trim()) return;
+                    
+                    try {
+                        // 调用后端TTS接口
+                        const response = await fetch('/api/tts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: text })
+                        });
+                        
+                        if (!response.ok) {
+                            console.error('TTS API调用失败');
+                            return;
+                        }
+                        
+                        // 获取音频数据
+                        const audioBlob = await response.blob();
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        
+                        // 播放音频
+                        const audio = new Audio(audioUrl);
+                        audio.play().catch(error => {
+                            console.error('音频播放失败:', error);
+                        });
+                        
+                        // 清理URL对象
+                        audio.onended = () => {
+                            URL.revokeObjectURL(audioUrl);
+                        };
+                        
+                    } catch (error) {
+                        console.error('TTS功能出错:', error);
+                    }
+                };
+
+                // 协调显示AI消息和播放TTS
+                const displayAIMessageWithTTS = async (aiMessage) => {
+                    if (isTTSEnabled.value) {
+                        // TTS开启时，先获取音频再显示文字
+                        try {
+                            const ttsResponse = await fetch('/api/tts', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ text: aiMessage.content })
+                            });
+                            
+                            if (ttsResponse.ok) {
+                                const audioBlob = await ttsResponse.blob();
+                                const audioUrl = URL.createObjectURL(audioBlob);
+                                
+                                // 显示文字并播放音频
+                                history.value.push(aiMessage);
+                                await scrollToBottom();
+                                
+                                const audio = new Audio(audioUrl);
+                                audio.play().catch(error => {
+                                    console.error('音频播放失败:', error);
+                                });
+                                
+                                audio.onended = () => {
+                                    URL.revokeObjectURL(audioUrl);
+                                };
+                            } else {
+                                // TTS失败，只显示文字
+                                history.value.push(aiMessage);
+                                await scrollToBottom();
+                            }
+                        } catch (error) {
+                            console.error('TTS获取失败:', error);
+                            // TTS失败，只显示文字
+                            history.value.push(aiMessage);
+                            await scrollToBottom();
+                        }
+                    } else {
+                        // TTS关闭时，直接显示文字
+                        history.value.push(aiMessage);
+                        await scrollToBottom();
                     }
                 };
 
@@ -949,7 +1338,21 @@
                     getUserEmoji,
                     getOptionEmoji,
                     getStepTypeColor,
-                    getStepBorderColor
+                    getStepBorderColor,
+                    handleCamera,
+                    handleVoice,
+                    handleAdd,
+                    isVoiceMode,
+                    isRecording,
+                    toggleVoiceMode,
+                    startRecording,
+                    stopRecording,
+                    mediaRecorder,
+                    audioChunks,
+                    isTTSEnabled,
+                    displayAIMessageWithTTS,
+                    speakText,
+                    processVoiceInput
                 };
             }
         }).mount('#app');
