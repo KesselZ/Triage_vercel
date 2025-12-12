@@ -4,7 +4,7 @@ import os
 import base64
 from typing import Dict, Any, Optional
 
-async def speech_to_text(audio_data: bytes, filename: str = "audio.webm", mime_type: str = "audio/webm") -> Dict[str, Any]:
+async def speech_to_text(audio_data: bytes, filename: str = "audio.webm", mime_type: str = "audio/webm", language: str = "zh") -> Dict[str, Any]:
     """
     语音转文字 - 统一的STT服务
     
@@ -12,6 +12,7 @@ async def speech_to_text(audio_data: bytes, filename: str = "audio.webm", mime_t
         audio_data: 音频二进制数据
         filename: 文件名
         mime_type: MIME类型
+        language: 语言代码 (zh=中文, en=英文), 默认zh
     
     Returns:
         {"text": "识别到的文本"}
@@ -27,7 +28,8 @@ async def speech_to_text(audio_data: bytes, filename: str = "audio.webm", mime_t
         
         files = {
             "file": (filename, audio_data, mime_type),
-            "model": (None, "whisper-1")
+            "model": (None, "whisper-1"),
+            "language": (None, language)
         }
         
         headers = {

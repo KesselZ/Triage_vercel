@@ -3,11 +3,10 @@ import asyncio
 import sys
 import os
 import base64
+import httpx
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from api.utils.voice_services import speech_to_text, decode_base64_audio
 
 def handler(request, response):
     """
@@ -35,19 +34,46 @@ def handler(request, response):
         # 获取base64编码的音频数据
         audio_base64 = body.get('audio_data')
         mime_type = body.get('mime_type', 'audio/webm')
+        language = body.get('language', 'zh')  # 默认中文
         
         if not audio_base64:
             response.status_code = 400
             return json.dumps({'error': 'No audio data provided'})
         
         # 解码base64音频数据
-        audio_data = decode_base64_audio(audio_base64)
+        audio_data = base64.b64decode(audio_base64)
         
-        # 调用共享的STT服务
-        result = asyncio.run(speech_to_text(audio_data, "audio.webm", mime_type))
+        # 获取API密钥
+        api_key = os.getenv('UNIAPI_KEY') or os.getenv('UNIAPI_API_KEY')
+        if not api_key:
+            response.status_code = 500
+            return json.dumps({'error': 'API key not configured'})
+        
+        # 调用UniAPI Whisper-1进行语音识别
+        url = "https://api.uniapi.io/v1/audio/transcriptions"
+        
+        files = {
+            "file": ("audio.webm", audio_data, mime_type),
+            "model": (None, "whisper-1"),
+            "language": (None, language)
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+        
+        async def transcribe_audio():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                api_response = await client.post(url, headers=headers, files=files)
+                api_response.raise_for_status()
+                return api_response.json()
+        
+        # 运行异步转录
+        result = asyncio.run(transcribe_audio())
+        transcribed_text = result.get("text", "")
         
         response.status_code = 200
-        return json.dumps(result)
+        return json.dumps({"text": transcribed_text.strip()})
         
     except Exception as e:
         print(f"STT Error: {str(e)}")

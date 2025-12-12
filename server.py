@@ -95,6 +95,7 @@ async def speech_to_text_endpoint(request: Request):
             body = await request.json()
             audio_base64 = body.get("audio_data")
             mime_type = body.get("mime_type", "audio/webm")
+            language = body.get("language", "zh")  # 默认中文
             
             if not audio_base64:
                 raise HTTPException(status_code=400, detail="audio_data field is required")
@@ -103,7 +104,7 @@ async def speech_to_text_endpoint(request: Request):
             audio_data = decode_base64_audio(audio_base64)
             filename = "audio.webm"
             
-            print(f"[STT] 收到JSON格式音频，大小: {len(audio_data)} bytes")
+            print(f"[STT] 收到JSON格式音频，大小: {len(audio_data)} bytes, 语言: {language}")
             
         else:
             # 处理FormData格式（原始文件上传）
@@ -115,8 +116,9 @@ async def speech_to_text_endpoint(request: Request):
             audio_data = await file.read()
             filename = file.filename
             mime_type = file.content_type
+            language = form.get("language", "zh")  # 默认中文
             
-            print(f"[STT] 收到FormData文件: {filename}, 类型: {mime_type}, 大小: {len(audio_data)} bytes")
+            print(f"[STT] 收到FormData文件: {filename}, 类型: {mime_type}, 大小: {len(audio_data)} bytes, 语言: {language}")
         
         # 检查音频数据
         if len(audio_data) == 0:
@@ -129,7 +131,7 @@ async def speech_to_text_endpoint(request: Request):
         print(f"[STT] 音频数据读取完成，大小: {len(audio_data)} bytes")
         
         # 调用共享的STT服务
-        result = await speech_to_text(audio_data, filename, mime_type)
+        result = await speech_to_text(audio_data, filename, mime_type, language)
         
         print(f"[STT] 识别结果: '{result['text']}'")
         return result
