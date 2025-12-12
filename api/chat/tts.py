@@ -2,16 +2,15 @@ import json
 import asyncio
 import sys
 import os
-import base64
 
 # 添加项目根目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from api.utils.voice_services import speech_to_text, decode_base64_audio
+from api.utils.voice_services import text_to_speech
 
 def handler(request, response):
     """
-    Vercel serverless function for speech-to-text
+    Vercel serverless function for text-to-speech
     """
     # 设置CORS头
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -31,26 +30,19 @@ def handler(request, response):
     try:
         # 解析请求体
         body = json.loads(request.body)
+        text = body.get('text', '')
         
-        # 获取base64编码的音频数据
-        audio_base64 = body.get('audio_data')
-        mime_type = body.get('mime_type', 'audio/webm')
-        language = body.get('language', 'zh')  # 默认中文
-        
-        if not audio_base64:
+        if not text.strip():
             response.status_code = 400
-            return json.dumps({'error': 'No audio data provided'})
+            return json.dumps({'error': 'No text provided'})
         
-        # 解码base64音频数据
-        audio_data = decode_base64_audio(audio_base64)
-        
-        # 调用共享的STT服务
-        result = asyncio.run(speech_to_text(audio_data, "audio.webm", mime_type, language))
+        # 调用共享的TTS服务
+        result = asyncio.run(text_to_speech(text))
         
         response.status_code = 200
         return json.dumps(result)
         
     except Exception as e:
-        print(f"STT Error: {str(e)}")
+        print(f"TTS Error: {str(e)}")
         response.status_code = 500
         return json.dumps({"error": str(e)})

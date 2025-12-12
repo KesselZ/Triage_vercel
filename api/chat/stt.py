@@ -5,7 +5,7 @@ import os
 import base64
 
 # 添加项目根目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from api.utils.voice_services import speech_to_text, decode_base64_audio
 

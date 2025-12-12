@@ -2,11 +2,11 @@ import json
 import asyncio
 import sys
 import os
-import base64
-import httpx
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from api.utils.voice_services import text_to_speech
 
 def handler(request, response):
     """
@@ -36,47 +36,11 @@ def handler(request, response):
             response.status_code = 400
             return json.dumps({'error': 'No text provided'})
         
-        if len(text) > 500:
-            response.status_code = 400
-            return json.dumps({'error': 'Text too long (max 500 characters)'})
-        
-        # 获取API密钥
-        api_key = os.getenv('UNIAPI_KEY') or os.getenv('UNIAPI_API_KEY')
-        if not api_key:
-            response.status_code = 500
-            return json.dumps({'error': 'API key not configured'})
-        
-        # 调用UniAPI TTS
-        url = "https://api.uniapi.io/v1/audio/speech"
-        
-        data = {
-            "model": "tts-1",
-            "input": text.strip(),
-            "voice": "alloy"
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        async def generate_speech():
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                api_response = await client.post(url, headers=headers, json=data)
-                api_response.raise_for_status()
-                return api_response.content
-        
-        # 运行异步TTS生成
-        audio_content = asyncio.run(generate_speech())
-        
-        # 将音频内容编码为base64返回
-        audio_base64 = base64.b64encode(audio_content).decode('utf-8')
+        # 调用共享的TTS服务
+        result = asyncio.run(text_to_speech(text))
         
         response.status_code = 200
-        return json.dumps({
-            "audio_data": audio_base64,
-            "format": "mp3"
-        })
+        return json.dumps(result)
         
     except Exception as e:
         print(f"TTS Error: {str(e)}")

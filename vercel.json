@@ -3,11 +3,11 @@
   "routes": [
     {
       "src": "/api/stt",
-      "dest": "/api/stt.py"
+      "dest": "/api/chat/stt.py"
     },
     {
       "src": "/api/tts",
-      "dest": "/api/tts.py"
+      "dest": "/api/chat/tts.py"
     },
     {
       "src": "/api/chat/next",
