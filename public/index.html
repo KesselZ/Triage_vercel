@@ -359,7 +359,7 @@
                         class="w-full border-2 border-purple-300 rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base focus:outline-none transition bg-purple-50 hover:bg-purple-100 active:bg-purple-200 active:scale-95 flex items-center justify-center space-x-2"
                         :disabled="isLoading"
                     >
-                        <svg class="w-5 h-5 md:w-6 md:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"></path></svg>
                         <span class="text-purple-700 font-medium">{{ isRecording ? '正在录音...' : '按下说话' }}</span>
                     </button>
                 </div>
@@ -434,9 +434,26 @@
                 const isVoiceMode = ref(false); // 新增语音模式状态
                 const isRecording = ref(false); // 录音状态
                 const isTTSEnabled = ref(true); // TTS开关状态
+                const currentAudio = ref(null);  // 当前播放的音频实例
+                const currentAudioUrl = ref(null);  // 当前音频URL，用于清理
                 const mediaRecorder = ref(null); // MediaRecorder实例
                 const audioChunks = ref([]); // 音频数据块
                 
+                // 停止当前TTS播放
+                const stopTTS = () => {
+                    if (currentAudio.value) {
+                        console.log(' [TTS] 停止当前音频播放');
+                        currentAudio.value.pause();
+                        currentAudio.value.currentTime = 0;
+                        currentAudio.value = null;
+                    }
+                    // 清理音频URL对象，防止内存泄漏
+                    if (currentAudioUrl.value) {
+                        URL.revokeObjectURL(currentAudioUrl.value);
+                        currentAudioUrl.value = null;
+                    }
+                };
+
                 // 模型选择状态
                 let defaultModel = 'grok-4-1-fast-non-reasoning';
                 try {
@@ -524,6 +541,9 @@
                 const sendMessage = async () => {
                     if (!inputMessage.value.trim() || isLoading.value) return;
 
+                    // 停止当前TTS播放
+                    stopTTS();
+
                     const userMsg = inputMessage.value.trim();
                     inputMessage.value = '';
                     
@@ -599,6 +619,9 @@
                     if (!message.selectedOptions || message.selectedOptions.length === 0) {
                         return;
                     }
+
+                    // 停止当前TTS播放
+                    stopTTS();
 
                     const selectedText = message.selectedOptions.join('、');
                     
@@ -736,6 +759,9 @@
                 };
 
                 const toggleVoiceMode = () => {
+                    // 停止当前TTS播放
+                    stopTTS();
+                    
                     isVoiceMode.value = !isVoiceMode.value;
                     if (isVoiceMode.value) {
                         // 进入语音模式，清空输入框
@@ -745,6 +771,9 @@
 
                 const startRecording = async () => {
                     if (isRecording.value) return;
+                    
+                    // 停止当前TTS播放
+                    stopTTS();
                     
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -838,75 +867,77 @@
                     console.log('🎤 [语音处理] 开始处理语音输入...');
                     console.log('🎤 [语音处理] 音频文件大小:', window.lastAudioBlob.size, 'bytes');
                     
-                    // 调用STT API将音频转换为文字
-                    console.log('🎤 [语音识别] 正在调用语音识别API...');
-                    const startTime = Date.now();
-                    
-                    let transcribedText = '';  // 修复变量作用域问题
-                    
-                    try {
-                        // 使用真实录音音频进行STT识别
-                        console.log('🎤 [语音识别] 使用录音音频进行语音识别');
-                        
-                        // 创建FormData发送录音音频文件
-                        const formData = new FormData();
-                        formData.append('file', window.lastAudioBlob, 'recording.webm');
-                        
-                        console.log('🎤 [语音识别] 准备发送录音音频到 /api/stt');
-                        
-                        const sttResponse = await fetch('/api/stt', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        
-                        console.log('🎤 [语音识别] 收到STT响应，状态:', sttResponse.status);
-                        
-                        if (!sttResponse.ok) {
-                            const errorText = await sttResponse.text();
-                            console.error('🎤 [语音识别] STT错误响应:', errorText);
-                            throw new Error(`STT API error: ${sttResponse.status}`);
-                        }
-                        
-                        const sttResult = await sttResponse.json();
-                        console.log('🎤 [语音识别] STT原始响应:', sttResult);
-                        
-                        transcribedText = sttResult.text || '';
-                        
-                        const sttDuration = Date.now() - startTime;
-                        console.log('🎤 [语音识别] 语音识别耗时:', sttDuration, 'ms');
-                        console.log('🎤 [语音识别] 识别到的输入内容是:', transcribedText);
-                        
-                        // 如果识别结果为空，显示提示但不中断流程
-                        if (!transcribedText.trim()) {
-                            console.log('🎤 [语音识别] 识别结果为空，使用占位符');
-                            transcribedText = '[语音识别为空]';
-                        }
-                        
-                    } catch (error) {
-                        console.error('🎤 [语音识别] STT调用失败:', error);
-                        // STT失败时使用占位符文本，避免完全中断用户体验
-                        transcribedText = '[语音识别失败]';
-                    }
-                    
-                    // 创建用户消息，包含显示文本和实际内容
+                    // 立即创建语音消息并显示，提供即时反馈
                     const voiceMessage = {
                         role: 'user',
-                        content: transcribedText,  // 实际内容，用于对话
-                        displayText: '🎤 语音输入',  // 显示文本，用于UI
-                        isVoice: true  // 标记为语音消息
+                        content: '[语音识别中...]',  // 临时内容，稍后更新
+                        displayText: '🎤 语音输入',  // UI显示
+                        isVoice: true
                     };
                     
-                    console.log('🎤 [语音处理] 创建语音消息，准备发送给AI...');
-                    
-                    // 添加到对话历史
+                    console.log('🎤 [语音处理] 立即显示语音消息气泡');
                     history.value.push(voiceMessage);
                     await scrollToBottom();
                     
                     console.log('🎤 [AI对话] 正在等待AI回复...');
                     
-                    // 继续AI对话流程
+                    // 开始AI对话流程（包含STT处理）
                     isLoading.value = true;
                     try {
+                        // 在"分析中"阶段进行STT识别
+                        console.log('🎤 [语音识别] 在分析中阶段进行语音识别...');
+                        const startTime = Date.now();
+                        
+                        let transcribedText = '';
+                        
+                        try {
+                            // 使用真实录音音频进行STT识别
+                            console.log('🎤 [语音识别] 使用录音音频进行语音识别');
+                            
+                            // 创建FormData发送录音音频文件
+                            const formData = new FormData();
+                            formData.append('file', window.lastAudioBlob, 'recording.webm');
+                            
+                            console.log('🎤 [语音识别] 准备发送录音音频到 /api/stt');
+                            
+                            const sttResponse = await fetch('/api/stt', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            console.log('🎤 [语音识别] 收到STT响应，状态:', sttResponse.status);
+                            
+                            if (!sttResponse.ok) {
+                                const errorText = await sttResponse.text();
+                                console.error('🎤 [语音识别] STT错误响应:', errorText);
+                                throw new Error(`STT API error: ${sttResponse.status}`);
+                            }
+                            
+                            const sttResult = await sttResponse.json();
+                            console.log('🎤 [语音识别] STT原始响应:', sttResult);
+                            
+                            transcribedText = sttResult.text || '';
+                            
+                            const sttDuration = Date.now() - startTime;
+                            console.log('🎤 [语音识别] 语音识别耗时:', sttDuration, 'ms');
+                            console.log('🎤 [语音识别] 识别到的输入内容是:', transcribedText);
+                            
+                            // 如果识别结果为空，显示提示但不中断流程
+                            if (!transcribedText.trim()) {
+                                console.log('🎤 [语音识别] 识别结果为空，使用占位符');
+                                transcribedText = '[语音识别为空]';
+                            }
+                            
+                        } catch (error) {
+                            console.error('🎤 [语音识别] STT调用失败:', error);
+                            // STT失败时使用占位符文本，避免完全中断用户体验
+                            transcribedText = '[语音识别失败]';
+                        }
+                        
+                        // 更新语音消息的实际内容
+                        voiceMessage.content = transcribedText;
+                        console.log('🎤 [语音处理] 更新语音消息内容:', transcribedText);
+                        
                         console.log('🎤 [AI对话] 发送请求到 /api/chat/next');
                         const response = await fetch(`${API_BASE}/chat/next`, {
                             method: 'POST',
@@ -967,6 +998,9 @@
                 const speakText = async (text) => {
                     if (!isTTSEnabled.value || !text.trim()) return;
                     
+                    // 停止之前的TTS播放
+                    stopTTS();
+                    
                     try {
                         // 调用后端TTS接口
                         const response = await fetch('/api/tts', {
@@ -983,20 +1017,29 @@
                         // 获取音频数据
                         const audioBlob = await response.blob();
                         const audioUrl = URL.createObjectURL(audioBlob);
+                        currentAudioUrl.value = audioUrl;  // 跟踪当前URL
                         
                         // 播放音频
                         const audio = new Audio(audioUrl);
+                        currentAudio.value = audio;  // 跟踪当前音频实例
+                        
                         audio.play().catch(error => {
                             console.error('音频播放失败:', error);
+                            currentAudio.value = null;
+                            currentAudioUrl.value = null;
                         });
                         
-                        // 清理URL对象
+                        // 清理URL对象和音频状态
                         audio.onended = () => {
                             URL.revokeObjectURL(audioUrl);
+                            currentAudio.value = null;
+                            currentAudioUrl.value = null;
                         };
                         
                     } catch (error) {
                         console.error('TTS功能出错:', error);
+                        currentAudio.value = null;
+                        currentAudioUrl.value = null;
                     }
                 };
 
@@ -1014,18 +1057,25 @@
                             if (ttsResponse.ok) {
                                 const audioBlob = await ttsResponse.blob();
                                 const audioUrl = URL.createObjectURL(audioBlob);
+                                currentAudioUrl.value = audioUrl;  // 跟踪当前URL
                                 
                                 // 显示文字并播放音频
                                 history.value.push(aiMessage);
                                 await scrollToBottom();
                                 
                                 const audio = new Audio(audioUrl);
+                                currentAudio.value = audio;  // 跟踪当前音频实例
+                                
                                 audio.play().catch(error => {
                                     console.error('音频播放失败:', error);
+                                    currentAudio.value = null;
+                                    currentAudioUrl.value = null;
                                 });
                                 
                                 audio.onended = () => {
                                     URL.revokeObjectURL(audioUrl);
+                                    currentAudio.value = null;
+                                    currentAudioUrl.value = null;
                                 };
                             } else {
                                 // TTS失败，只显示文字
@@ -1033,13 +1083,15 @@
                                 await scrollToBottom();
                             }
                         } catch (error) {
-                            console.error('TTS获取失败:', error);
+                            console.error('TTS功能出错:', error);
+                            currentAudio.value = null;
+                            currentAudioUrl.value = null;
                             // TTS失败，只显示文字
                             history.value.push(aiMessage);
                             await scrollToBottom();
                         }
                     } else {
-                        // TTS关闭时，直接显示文字
+                        // TTS关闭，只显示文字
                         history.value.push(aiMessage);
                         await scrollToBottom();
                     }
