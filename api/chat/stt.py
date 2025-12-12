@@ -1,13 +1,8 @@
 import json
 import asyncio
-import sys
 import os
 import base64
-
-# 添加项目根目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-from api.utils.voice_services import speech_to_text, decode_base64_audio
+import httpx
 
 def handler(request, response):
     """
@@ -16,7 +11,7 @@ def handler(request, response):
     # 设置CORS头
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     response.headers['Content-Type'] = 'application/json'
     
     # 处理OPTIONS请求（CORS预检）
@@ -42,13 +37,35 @@ def handler(request, response):
             return json.dumps({'error': 'No audio data provided'})
         
         # 解码base64音频数据
-        audio_data = decode_base64_audio(audio_base64)
+        audio_data = base64.b64decode(audio_base64)
         
-        # 调用共享的STT服务
-        result = asyncio.run(speech_to_text(audio_data, "audio.webm", mime_type, language))
+        # 获取API密钥
+        api_key = os.getenv('UNIAPI_KEY') or os.getenv('UNIAPI_API_KEY')
+        if not api_key:
+            response.status_code = 500
+            return json.dumps({'error': 'API key not configured'})
+        
+        # 调用UniAPI Whisper-1进行语音识别
+        async def transcribe():
+            url = "https://api.uniapi.io/v1/audio/transcriptions"
+            files = {
+                "file": ("audio.webm", audio_data, mime_type),
+                "model": (None, "whisper-1"),
+                "language": (None, language)
+            }
+            headers = {
+                "Authorization": f"Bearer {api_key}"
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                api_response = await client.post(url, headers=headers, files=files)
+                api_response.raise_for_status()
+                return api_response.json()
+        
+        result = asyncio.run(transcribe())
+        transcribed_text = result.get("text", "")
         
         response.status_code = 200
-        return json.dumps(result)
+        return json.dumps({"text": transcribed_text.strip()})
         
     except Exception as e:
         print(f"STT Error: {str(e)}")
