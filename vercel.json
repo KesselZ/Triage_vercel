@@ -2,11 +2,11 @@
   "version": 2,
   "routes": [
     {
-      "src": "/api/stt",
+      "src": "/api/chat/stt",
       "dest": "/api/chat/stt.py"
     },
     {
-      "src": "/api/tts",
+      "src": "/api/chat/tts",
       "dest": "/api/chat/tts.py"
     },
     {

@@ -71,7 +71,7 @@ async def chat_diagnose(request: ChatRequest):
     return result
 
 
-@app.post("/api/tts")
+@app.post("/api/chat/tts")
 async def text_to_speech_endpoint(request: TTSRequest):
     """文本转语音 - 使用共享服务"""
     try:
@@ -83,7 +83,7 @@ async def text_to_speech_endpoint(request: TTSRequest):
         raise HTTPException(status_code=500, detail=f"TTS service error: {str(e)}")
 
 
-@app.post("/api/stt")
+@app.post("/api/chat/stt")
 async def speech_to_text_endpoint(request: Request):
     """语音转文字 - 使用共享服务，支持FormData和JSON格式"""
     try:

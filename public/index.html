@@ -910,7 +910,7 @@
                             
 
                             // 发送JSON格式的请求
-                            const sttResponse = await fetch('/api/stt', {
+                            const sttResponse = await fetch('/api/chat/stt', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1019,7 +1019,7 @@
                     
                     try {
                         // 调用后端TTS接口
-                        const response = await fetch('/api/tts', {
+                        const response = await fetch('/api/chat/tts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ text: text })
@@ -1087,7 +1087,7 @@
                     if (isTTSEnabled.value) {
                         // TTS开启时，先获取音频再显示文字
                         try {
-                            const ttsResponse = await fetch('/api/tts', {
+                            const ttsResponse = await fetch('/api/chat/tts', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text: aiMessage.content })
