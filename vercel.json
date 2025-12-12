@@ -2,8 +2,20 @@
   "version": 2,
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "src": "/api/stt",
+      "dest": "/api/stt.py"
+    },
+    {
+      "src": "/api/tts",
+      "dest": "/api/tts.py"
+    },
+    {
+      "src": "/api/chat/next",
+      "dest": "/api/chat/next.py"
+    },
+    {
+      "src": "/api/chat/diagnose",
+      "dest": "/api/chat/diagnose.py"
     },
     {
       "src": "/",

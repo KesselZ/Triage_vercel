@@ -894,19 +894,35 @@
                             // 使用真实录音音频进行STT识别
                             console.log('🎤 [语音识别] 使用录音音频进行语音识别');
                             
-                            // 创建FormData发送录音音频文件
-                            const formData = new FormData();
-                            formData.append('file', window.lastAudioBlob, 'recording.webm');
-                            
-                            console.log('🎤 [语音识别] 准备发送录音音频到 /api/stt');
-                            
-                            const sttResponse = await fetch('/api/stt', {
-                                method: 'POST',
-                                body: formData
+
+                            // 将音频blob转换为base64
+                            const reader = new FileReader();
+                            const audioBase64 = await new Promise((resolve, reject) => {
+                                reader.onload = () => {
+                                    const result = reader.result;
+                                    // 移除data:audio/webm;base64,前缀
+                                    const base64Data = result.split(',')[1];
+                                    resolve(base64Data);
+                                };
+                                reader.onerror = reject;
+                                reader.readAsDataURL(window.lastAudioBlob);
                             });
                             
+
+                            // 发送JSON格式的请求
+                            const sttResponse = await fetch('/api/stt', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    audio_data: audioBase64,
+                                    mime_type: 'audio/webm;codecs=opus'
+                                })
+                            });
+                            
+
                             console.log('🎤 [语音识别] 收到STT响应，状态:', sttResponse.status);
                             
+
                             if (!sttResponse.ok) {
                                 const errorText = await sttResponse.text();
                                 console.error('🎤 [语音识别] STT错误响应:', errorText);
@@ -1014,8 +1030,31 @@
                             return;
                         }
                         
-                        // 获取音频数据
-                        const audioBlob = await response.blob();
+                        let audioBlob;
+                        const contentType = response.headers.get('content-type');
+                        
+                        if (contentType && contentType.includes('application/json')) {
+                            // Vercel服务器：处理base64编码的音频
+                            const result = await response.json();
+                            const audioBase64 = result.audio_data;
+                            if (audioBase64) {
+                                const audioBytes = atob(audioBase64);
+                                const audioArray = new Uint8Array(audioBytes.length);
+                                for (let i = 0; i < audioBytes.length; i++) {
+                                    audioArray[i] = audioBytes.charCodeAt(i);
+                                }
+                                audioBlob = new Blob([audioArray], { type: 'audio/mpeg' });
+                            }
+                        } else {
+                            // 本地server：直接使用blob响应
+                            audioBlob = await response.blob();
+                        }
+                        
+                        if (!audioBlob) {
+                            console.error('无法获取音频数据');
+                            return;
+                        }
+                        
                         const audioUrl = URL.createObjectURL(audioBlob);
                         currentAudioUrl.value = audioUrl;  // 跟踪当前URL
                         
@@ -1055,28 +1094,53 @@
                             });
                             
                             if (ttsResponse.ok) {
-                                const audioBlob = await ttsResponse.blob();
-                                const audioUrl = URL.createObjectURL(audioBlob);
-                                currentAudioUrl.value = audioUrl;  // 跟踪当前URL
+                                let audioBlob;
+                                const contentType = ttsResponse.headers.get('content-type');
                                 
-                                // 显示文字并播放音频
-                                history.value.push(aiMessage);
-                                await scrollToBottom();
+                                if (contentType && contentType.includes('application/json')) {
+                                    // Vercel服务器：处理base64编码的音频
+                                    const result = await ttsResponse.json();
+                                    const audioBase64 = result.audio_data;
+                                    if (audioBase64) {
+                                        const audioBytes = atob(audioBase64);
+                                        const audioArray = new Uint8Array(audioBytes.length);
+                                        for (let i = 0; i < audioBytes.length; i++) {
+                                            audioArray[i] = audioBytes.charCodeAt(i);
+                                        }
+                                        audioBlob = new Blob([audioArray], { type: 'audio/mpeg' });
+                                    }
+                                } else {
+                                    // 本地server：直接使用blob响应
+                                    audioBlob = await ttsResponse.blob();
+                                }
                                 
-                                const audio = new Audio(audioUrl);
-                                currentAudio.value = audio;  // 跟踪当前音频实例
-                                
-                                audio.play().catch(error => {
-                                    console.error('音频播放失败:', error);
-                                    currentAudio.value = null;
-                                    currentAudioUrl.value = null;
-                                });
-                                
-                                audio.onended = () => {
-                                    URL.revokeObjectURL(audioUrl);
-                                    currentAudio.value = null;
-                                    currentAudioUrl.value = null;
-                                };
+                                if (audioBlob) {
+                                    const audioUrl = URL.createObjectURL(audioBlob);
+                                    currentAudioUrl.value = audioUrl;  // 跟踪当前URL
+                                    
+                                    // 显示文字并播放音频
+                                    history.value.push(aiMessage);
+                                    await scrollToBottom();
+                                    
+                                    const audio = new Audio(audioUrl);
+                                    currentAudio.value = audio;  // 跟踪当前音频实例
+                                    
+                                    audio.play().catch(error => {
+                                        console.error('音频播放失败:', error);
+                                        currentAudio.value = null;
+                                        currentAudioUrl.value = null;
+                                    });
+                                    
+                                    audio.onended = () => {
+                                        URL.revokeObjectURL(audioUrl);
+                                        currentAudio.value = null;
+                                        currentAudioUrl.value = null;
+                                    };
+                                } else {
+                                    // 音频获取失败，只显示文字
+                                    history.value.push(aiMessage);
+                                    await scrollToBottom();
+                                }
                             } else {
                                 // TTS失败，只显示文字
                                 history.value.push(aiMessage);

@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response, FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-import httpx
+import asyncio
 import os
 import json
 import uvicorn
@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from api.utils.ai_client import get_next_question, generate_diagnosis
+from api.utils.voice_services import speech_to_text, text_to_speech, decode_base64_audio, encode_audio_to_base64
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -71,111 +72,70 @@ async def chat_diagnose(request: ChatRequest):
 
 
 @app.post("/api/tts")
-async def text_to_speech(request: TTSRequest):
-    """文本转语音"""
-    if not request.text or len(request.text.strip()) == 0:
-        raise HTTPException(status_code=400, detail="Text cannot be empty")
-    
-    if len(request.text) > 500:  # 限制文本长度
-        raise HTTPException(status_code=400, detail="Text too long (max 500 characters)")
-    
+async def text_to_speech_endpoint(request: TTSRequest):
+    """文本转语音 - 使用共享服务"""
     try:
-        # 调用UniAPI TTS服务
-        api_key = os.getenv("UNIAPI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="TTS API key not configured")
-        
-        url = "https://api.uniapi.io/v1/audio/speech"
-        payload = {
-            "model": "tts-1",
-            "input": request.text.strip(),
-            "voice": "alloy",
-            "response_format": "mp3"
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
+        # 调用共享的TTS服务
+        result = await text_to_speech(request.text)
+        return result
             
-            # 返回音频数据
-            from fastapi.responses import Response
-            return Response(
-                content=response.content,
-                media_type="audio/mpeg",
-                headers={"Content-Disposition": "inline; filename=speech.mp3"}
-            )
-            
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=500, detail=f"TTS API error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS service error: {str(e)}")
 
 
 @app.post("/api/stt")
-async def speech_to_text(file: UploadFile = File(...)):
-    """语音转文字"""
+async def speech_to_text_endpoint(request: Request):
+    """语音转文字 - 使用共享服务，支持FormData和JSON格式"""
     try:
-        print(f"[STT] 收到文件: {file.filename}, 类型: {file.content_type}, 大小: {file.size if hasattr(file, 'size') else 'unknown'}")
+        # 检查Content-Type
+        content_type = request.headers.get("content-type", "")
         
-        # 检查文件类型
-        if not file.content_type.startswith('audio/'):
-            raise HTTPException(status_code=400, detail="File must be an audio file")
+        if "application/json" in content_type:
+            # 处理JSON格式（base64编码）
+            body = await request.json()
+            audio_base64 = body.get("audio_data")
+            mime_type = body.get("mime_type", "audio/webm")
+            
+            if not audio_base64:
+                raise HTTPException(status_code=400, detail="audio_data field is required")
+            
+            # 解码base64音频数据
+            audio_data = decode_base64_audio(audio_base64)
+            filename = "audio.webm"
+            
+            print(f"[STT] 收到JSON格式音频，大小: {len(audio_data)} bytes")
+            
+        else:
+            # 处理FormData格式（原始文件上传）
+            form = await request.form()
+            if "file" not in form:
+                raise HTTPException(status_code=400, detail="file field is required")
+            
+            file = form["file"]
+            audio_data = await file.read()
+            filename = file.filename
+            mime_type = file.content_type
+            
+            print(f"[STT] 收到FormData文件: {filename}, 类型: {mime_type}, 大小: {len(audio_data)} bytes")
         
-        # 读取音频数据
-        audio_data = await file.read()
-        
+        # 检查音频数据
         if len(audio_data) == 0:
-            raise HTTPException(status_code=400, detail="Audio file is empty")
+            raise HTTPException(status_code=400, detail="Audio data is empty")
+            
+        # 检查文件类型（仅对FormData）
+        if "application/json" not in content_type and not mime_type.startswith('audio/'):
+            raise HTTPException(status_code=400, detail="File must be an audio file")
             
         print(f"[STT] 音频数据读取完成，大小: {len(audio_data)} bytes")
         
-        # 调用UniAPI STT服务
-        api_key = os.getenv("UNIAPI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="STT API key not configured")
+        # 调用共享的STT服务
+        result = await speech_to_text(audio_data, filename, mime_type)
         
-        print(f"[STT] 开始调用UniAPI API...")
-        url = "https://api.uniapi.io/v1/audio/transcriptions"
-        
-        # 使用multipart/form-data格式上传文件
-        files = {
-            "file": (file.filename, audio_data, file.content_type),
-            "model": (None, "whisper-1")
-            # "language": (None, "zh")  # 暂时移除语言参数测试
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, files=files)
-            print(f"[STT] UniAPI响应状态: {response.status_code}")
-            print(f"[STT] UniAPI响应头: {dict(response.headers)}")
+        print(f"[STT] 识别结果: '{result['text']}'")
+        return result
             
-            if response.status_code != 200:
-                print(f"[STT] UniAPI错误响应: {response.text}")
-                raise HTTPException(status_code=500, detail=f"STT API error: {response.status_code}")
-            
-            result = response.json()
-            print(f"[STT] UniAPI原始响应: {result}")
-            
-            transcribed_text = result.get("text", "")
-            print(f"[STT] 提取的文本: '{transcribed_text}'")
-            
-            return {"text": transcribed_text.strip()}
-            
-    except httpx.HTTPStatusError as e:
-        print(f"[STT] HTTP错误: {e}")
-        print(f"[STT] 错误响应: {e.response.text}")
-        raise HTTPException(status_code=500, detail=f"STT API error: {e}")
     except Exception as e:
-        print(f"[STT] 异常: {e}")
+        print(f"[STT] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"STT service error: {str(e)}")
 
 
