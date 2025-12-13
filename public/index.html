@@ -566,6 +566,7 @@
                 const audioContext = ref(null); // 音频上下文
                 const audioWorklet = ref(null); // 音频处理节点
                 const wsConnecting = ref(false); // WebSocket连接中标志
+                const preAuthorizedStream = ref(null); // 提前申请的麦克风流（用于快速启动录音）
                 
                 // TTS状态追踪
                 const currentTTSContext = ref(null); // 当前TTS的AudioContext
@@ -802,7 +803,7 @@
                     // 如果有待发送的图片，添加到消息中
                     if (pendingImages.value.length > 0) {
                         userMessage.images = [...pendingImages.value];
-                        userMessage.displayText = pendingImages.value.length > 0 ? `📷 ${userMsg}` : userMsg;
+                        userMessage.displayText = userMsg;
                         pendingImages.value = []; // 清空待发送列表
                     }
                     
@@ -1132,14 +1133,38 @@
                     input.click();
                 };
 
-                const toggleVoiceMode = () => {
-                    // 停止当前TTS播放
-                    stopTTS();
-                    
+                const toggleVoiceMode = async () => {
                     isVoiceMode.value = !isVoiceMode.value;
                     if (isVoiceMode.value) {
                         // 进入语音模式，清空输入框
                         inputMessage.value = '';
+                        
+                        // 🔑 提前申请麦克风权限，让后续录音更流畅
+                        if (!preAuthorizedStream.value) {
+                            try {
+                                console.log('🎤 提前申请麦克风权限...');
+                                const stream = await navigator.mediaDevices.getUserMedia({ 
+                                    audio: {
+                                        sampleRate: 16000,
+                                        channelCount: 1,
+                                        echoCancellation: true,
+                                        noiseSuppression: true
+                                    }
+                                });
+                                preAuthorizedStream.value = stream;
+                                console.log('✅ 麦克风权限已获取，可以随时开始录音');
+                            } catch (error) {
+                                console.error('❌ 麦克风权限申请失败:', error);
+                                // 不阻止用户进入语音模式，等按下说话时再申请
+                            }
+                        }
+                    } else {
+                        // 退出语音模式时，释放提前申请的stream
+                        if (preAuthorizedStream.value) {
+                            preAuthorizedStream.value.getTracks().forEach(track => track.stop());
+                            preAuthorizedStream.value = null;
+                            console.log('🔌 已释放提前申请的麦克风流');
+                        }
                     }
                 };
 
@@ -1196,15 +1221,24 @@
                             // 发送开始命令
                             streamingWs.value.send(JSON.stringify({ action: 'start' }));
                             
-                            // 获取麦克风流
-                            const stream = await navigator.mediaDevices.getUserMedia({ 
-                                audio: {
-                                    sampleRate: 16000,
-                                    channelCount: 1,
-                                    echoCancellation: true,
-                                    noiseSuppression: true
-                                }
-                            });
+                            // 🔑 优先使用提前申请的麦克风流，如果没有再申请
+                            let stream;
+                            if (preAuthorizedStream.value) {
+                                console.log('⚡ 使用提前申请的麦克风流，零延迟启动');
+                                stream = preAuthorizedStream.value;
+                                // 清空引用，因为stream会被用于录音
+                                preAuthorizedStream.value = null;
+                            } else {
+                                console.log('🎤 申请新的麦克风权限...');
+                                stream = await navigator.mediaDevices.getUserMedia({ 
+                                    audio: {
+                                        sampleRate: 16000,
+                                        channelCount: 1,
+                                        echoCancellation: true,
+                                        noiseSuppression: true
+                                    }
+                                });
+                            }
                             
                             // 使用 AudioContext 处理音频
                             audioContext.value = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -1351,6 +1385,25 @@
                             audioContext.value = null;
                         }
                         
+                        // 🔑 如果还在语音模式，重新申请stream以备下次使用（不会弹出权限请求）
+                        if (isVoiceMode.value && !preAuthorizedStream.value) {
+                            try {
+                                console.log('🔄 重新申请麦克风流以备下次使用...');
+                                const stream = await navigator.mediaDevices.getUserMedia({ 
+                                    audio: {
+                                        sampleRate: 16000,
+                                        channelCount: 1,
+                                        echoCancellation: true,
+                                        noiseSuppression: true
+                                    }
+                                });
+                                preAuthorizedStream.value = stream;
+                                console.log('✅ 已重新申请麦克风流，下次录音零延迟');
+                            } catch (error) {
+                                console.warn('⚠️  重新申请麦克风流失败，下次录音时再申请:', error);
+                            }
+                        }
+                        
                         // 等待最终结果
                         setTimeout(async () => {
                             console.log('🔍 [500ms后] 检查识别文本:', streamingText.value);
@@ -1366,7 +1419,7 @@
                                 const voiceMessage = {
                                     role: 'user',
                                     content: recognizedText,
-                                    displayText: `🎤 ${recognizedText}`,
+                                    displayText: recognizedText,
                                     isVoice: true
                                 };
                                 history.value.push(voiceMessage);
@@ -1487,7 +1540,7 @@
                     const voiceMessage = {
                         role: 'user',
                         content: '[语音识别中...]',  // 临时内容，稍后更新
-                        displayText: '🎤 语音输入',  // UI显示
+                        displayText: '语音输入',  // UI显示
                         isVoice: true
                     };
                     
