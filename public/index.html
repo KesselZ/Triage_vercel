@@ -77,6 +77,64 @@
         .avatar-glow {
             box-shadow: 0 2px 8px rgba(94, 37, 144, 0.2);
         }
+        /* 语音录音光晕动画 */
+        .voice-glow {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(147, 51, 234, 0.4) 0%, rgba(168, 85, 247, 0.2) 40%, transparent 70%);
+            animation: pulse-glow 1.5s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 50;
+        }
+        @keyframes pulse-glow {
+            0%, 100% {
+                transform: translateX(-50%) scale(1);
+                opacity: 0.6;
+            }
+            50% {
+                transform: translateX(-50%) scale(1.2);
+                opacity: 0.8;
+            }
+        }
+        /* 波浪音频动画 */
+        .audio-wave {
+            position: fixed;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            z-index: 51;
+            pointer-events: none;
+        }
+        .audio-wave-bar {
+            width: 4px;
+            background: linear-gradient(to top, #9333ea, #a855f7);
+            border-radius: 2px;
+            animation: wave 1s ease-in-out infinite;
+        }
+        .audio-wave-bar:nth-child(1) { height: 20px; animation-delay: 0s; }
+        .audio-wave-bar:nth-child(2) { height: 30px; animation-delay: 0.1s; }
+        .audio-wave-bar:nth-child(3) { height: 40px; animation-delay: 0.2s; }
+        .audio-wave-bar:nth-child(4) { height: 30px; animation-delay: 0.3s; }
+        .audio-wave-bar:nth-child(5) { height: 20px; animation-delay: 0.4s; }
+        @keyframes wave {
+            0%, 100% {
+                transform: scaleY(0.5);
+                opacity: 0.5;
+            }
+            50% {
+                transform: scaleY(1);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-50 to-gray-50 text-gray-800 font-sans">
@@ -204,7 +262,7 @@
                                             ? 'bg-purple-600 text-white border-purple-600 shadow-md' 
                                             : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-purple-600 hover:bg-purple-50'
                                     ]"
-                                    :disabled="isLoading"
+                                    :disabled="isRecording"
                                 >
                                     {{ option }}
                                 </button>
@@ -217,17 +275,19 @@
                 <div v-else class="flex justify-end max-w-[90%] md:max-w-[85%]">
                     <!-- 消息气泡 -->
                     <div class="bg-gradient-to-r from-yellow-25 to-amber-25 text-gray-700 p-3 md:p-4 rounded-2xl rounded-tr-sm shadow-md flex-1 border border-yellow-100" style="background: linear-gradient(to right, #fefce8, #fffbeb);">
-                        <!-- 图片显示 -->
-                        <div v-if="msg.images && msg.images.length > 0" class="mb-2 flex flex-wrap gap-2">
-                            <img 
-                                v-for="(imgUrl, imgIndex) in msg.images" 
-                                :key="imgIndex"
-                                :src="imgUrl" 
-                                class="max-w-full md:max-w-xs rounded-lg border border-yellow-200 cursor-pointer hover:opacity-90 transition"
-                                @click="openImagePreview(imgUrl)"
-                            />
+                        <!-- 图片预览 -->
+                        <div v-if="msg.images && msg.images.length > 0" class="mb-2 space-y-2">
+                            <div v-for="(img, imgIndex) in msg.images" :key="imgIndex" class="relative">
+                                <img 
+                                    :src="`data:${img.mime_type};base64,${img.base64}`"
+                                    class="rounded-lg max-w-full h-auto max-h-64 object-contain border border-yellow-200 cursor-pointer hover:opacity-90 transition"
+                                    alt="上传的图片"
+                                    @click="previewImage(`data:${img.mime_type};base64,${img.base64}`)"
+                                />
+                            </div>
                         </div>
-                        <p v-if="msg.content" class="leading-relaxed text-sm md:text-base">{{ msg.displayText || msg.content }}</p>
+                        <!-- 文字内容 -->
+                        <p class="leading-relaxed text-sm md:text-base">{{ msg.displayText || msg.content }}</p>
                     </div>
                 </div>
             </div>
@@ -328,8 +388,53 @@
 
         </main>
 
+        <!-- 语音录音光晕和波浪动画 -->
+        <transition name="fade">
+            <div v-if="isRecording">
+                <!-- 紫色渐变光晕 -->
+                <div class="voice-glow"></div>
+                <!-- 波浪音频动画 -->
+                <div class="audio-wave">
+                    <div class="audio-wave-bar"></div>
+                    <div class="audio-wave-bar"></div>
+                    <div class="audio-wave-bar"></div>
+                    <div class="audio-wave-bar"></div>
+                    <div class="audio-wave-bar"></div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- 图片预览模态框 -->
+        <transition name="fade">
+            <div v-if="previewImageUrl" @click="closeImagePreview" class="fixed inset-0 bg-black bg-opacity-90 z-[9999] flex items-center justify-center p-4">
+                <div class="relative max-w-full max-h-full">
+                    <img :src="previewImageUrl" class="max-w-full max-h-[90vh] object-contain rounded-lg" alt="预览图片" />
+                    <button @click="closeImagePreview" class="absolute top-4 right-4 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </transition>
+
         <!-- Input Area -->
         <footer class="flex-shrink-0 bg-white p-3 md:p-4 border-t border-gray-100 shadow-lg">
+            <!-- 图片预览区域 -->
+            <div v-if="pendingImages.length > 0" class="mb-3 flex flex-wrap gap-2">
+                <div v-for="(img, index) in pendingImages" :key="index" class="relative group">
+                    <img 
+                        :src="`data:${img.mime_type};base64,${img.base64}`"
+                        class="w-20 h-20 object-cover rounded-lg border-2 border-purple-300"
+                        :alt="img.name"
+                    />
+                    <button 
+                        @click="removeImage(index)"
+                        class="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg transition opacity-0 group-hover:opacity-100"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            </div>
+            
             <!-- 显示当前AI消息的选项提交按钮 -->
             <div v-if="hasCurrentOptions" class="mb-3">
                 <div class="flex items-center justify-between bg-purple-100 p-3 rounded-xl">
@@ -348,47 +453,12 @@
                 </div>
             </div>
             
-            <!-- 图片预览区域 -->
-            <div v-if="selectedImages.length > 0" class="mb-3 flex flex-wrap gap-2">
-                <div v-for="(img, index) in selectedImages" :key="index" class="relative group">
-                    <img :src="img.preview" class="w-20 h-20 md:w-24 md:h-24 object-cover rounded-xl border-2 border-purple-300 shadow-sm" />
-                    <button 
-                        @click="removeImage(index)"
-                        class="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-            </div>
-            
             <div class="flex space-x-2 md:space-x-3" v-if="!diagnosis">
-                <!-- 隐藏的文件输入框 - 移动端用于拍照 -->
-                <input 
-                    type="file" 
-                    ref="cameraInput" 
-                    @change="handleFileSelect" 
-                    accept="image/*"
-                    capture="environment"
-                    class="hidden"
-                />
-                
-                <!-- 隐藏的文件输入框 - 桌面端用于选择文件 -->
-                <input 
-                    type="file" 
-                    ref="fileInput" 
-                    @change="handleFileSelect" 
-                    accept="image/*"
-                    class="hidden"
-                    multiple
-                />
-                
-                <!-- 相机按钮 - 仅移动端显示 -->
                 <button 
-                    v-if="(!inputMessage.trim() || isVoiceMode) && isMobile"
-                    @click="triggerCamera" 
+                    v-if="!inputMessage.trim() || isVoiceMode"
+                    @click="handleCamera" 
                     class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2.5 md:p-3 rounded-xl transition flex items-center justify-center"
                     :disabled="isLoading"
-                    title="拍照"
                 >
                     <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                 </button>
@@ -440,17 +510,12 @@
                     >
                         <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
                     </button>
-                    <!-- 图片按钮 - 移动端显示"+"，桌面端显示图片图标 -->
                     <button 
-                        @click="triggerFileInput" 
+                        @click="handleAdd" 
                         class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2.5 md:p-3 rounded-xl transition flex items-center justify-center"
                         :disabled="isLoading"
-                        :title="isMobile ? '添加图片' : '选择图片'"
                     >
-                        <!-- 移动端显示 + 图标 -->
-                        <svg v-if="isMobile" class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        <!-- 桌面端显示图片图标 -->
-                        <svg v-else class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                     </button>
                 </div>
                 
@@ -480,6 +545,8 @@
                 const API_BASE = '/api';
                 const inputMessage = ref('');
                 const isLoading = ref(false);
+                const isWaitingAI = ref(false); // 是否正在等待AI响应（不影响UI交互）
+                const currentAIAbortController = ref(null); // 用于取消AI请求
                 const diagnosis = ref(null);
                 const isVoiceMode = ref(false); // 新增语音模式状态
                 const isRecording = ref(false); // 录音状态
@@ -489,25 +556,29 @@
                 const mediaRecorder = ref(null); // MediaRecorder实例
                 const audioChunks = ref([]); // 音频数据块
                 
-                // 图片相关状态
-                const selectedImages = ref([]); // 已选择的图片列表
-                const fileInput = ref(null); // 文件输入框引用（桌面端）
-                const cameraInput = ref(null); // 相机输入框引用（移动端）
+                // 图片相关
+                const previewImageUrl = ref(null); // 预览图片URL
+                const pendingImages = ref([]); // 待发送的图片列表
                 
-                // 检测是否为移动设备
-                const isMobile = ref(false);
-                onMounted(() => {
-                    isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-                    // 监听窗口大小变化
-                    window.addEventListener('resize', () => {
-                        isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-                    });
-                });
+                // 流式识别相关
+                const streamingWs = ref(null); // WebSocket连接
+                const streamingText = ref(''); // 实时识别文本
+                const audioContext = ref(null); // 音频上下文
+                const audioWorklet = ref(null); // 音频处理节点
+                const wsConnecting = ref(false); // WebSocket连接中标志
+                
+                // TTS状态追踪
+                const currentTTSContext = ref(null); // 当前TTS的AudioContext
+                const currentTTSReader = ref(null); // 当前TTS的流读取器
+                const isTTSPlaying = ref(false); // TTS是否正在播放
                 
                 // 停止当前TTS播放
                 const stopTTS = () => {
+                    console.log('🛑 [TTS] 停止当前TTS播放');
+                    
+                    // 停止旧版TTS（Audio元素）
                     if (currentAudio.value) {
-                        console.log(' [TTS] 停止当前音频播放');
+                        console.log('🛑 [TTS] 停止Audio元素播放');
                         currentAudio.value.pause();
                         currentAudio.value.currentTime = 0;
                         currentAudio.value = null;
@@ -517,6 +588,29 @@
                         URL.revokeObjectURL(currentAudioUrl.value);
                         currentAudioUrl.value = null;
                     }
+                    
+                    // 停止流式TTS（Web Audio API）
+                    if (currentTTSReader.value) {
+                        console.log('🛑 [TTS] 取消流式读取');
+                        try {
+                            currentTTSReader.value.cancel();
+                        } catch (e) {
+                            console.warn('取消流式读取失败:', e);
+                        }
+                        currentTTSReader.value = null;
+                    }
+                    
+                    if (currentTTSContext.value) {
+                        console.log('🛑 [TTS] 关闭AudioContext');
+                        try {
+                            currentTTSContext.value.close();
+                        } catch (e) {
+                            console.warn('关闭AudioContext失败:', e);
+                        }
+                        currentTTSContext.value = null;
+                    }
+                    
+                    isTTSPlaying.value = false;
                 };
 
                 // 模型选择状态
@@ -571,13 +665,85 @@
                 };
                 
                 // 组件挂载时添加点击外部监听
+                // 预连接 WebSocket（优化：减少50-200ms延迟）
+                const preConnectWebSocket = () => {
+                    // 避免重复连接
+                    if (streamingWs.value || wsConnecting.value) {
+                        console.log('⏭️  WebSocket已存在或正在连接，跳过预连接');
+                        return;
+                    }
+                    
+                    wsConnecting.value = true;
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/api/chat/streaming-asr`;
+                    
+                    try {
+                        streamingWs.value = new WebSocket(wsUrl);
+                        
+                        streamingWs.value.onopen = () => {
+                            console.log('🔗 WebSocket 预连接成功');
+                            wsConnecting.value = false;
+                        };
+                        
+                        // 设置消息处理（只设置一次，所有录音会话共享）
+                        streamingWs.value.onmessage = (event) => {
+                            try {
+                                const data = JSON.parse(event.data);
+                                console.log('📥 收到识别结果:', data, '当前streamingText:', streamingText.value);
+                                
+                                if (data.type === 'partial' || data.type === 'final') {
+                                    // 🔑 只保存文本，不显示气泡
+                                    const oldText = streamingText.value;
+                                    streamingText.value = data.text;
+                                    console.log(`📝 ${data.type === 'final' ? '最终' : '临时'}识别文本: "${oldText}" -> "${data.text}"`);
+                                } else if (data.type === 'error') {
+                                    console.error('❌ 语音识别错误:', data.message);
+                                    streamingText.value = '';
+                                } else if (data.type === 'done') {
+                                    console.log('✅ 识别完成信号，当前文本:', streamingText.value);
+                                }
+                            } catch (error) {
+                                console.error('❌ 解析WebSocket消息错误:', error);
+                            }
+                        };
+                        
+                        streamingWs.value.onerror = (error) => {
+                            console.error('❌ WebSocket 连接错误:', error);
+                            streamingText.value = '';
+                        };
+                        
+                        streamingWs.value.onclose = () => {
+                            console.log('🔌 WebSocket 连接关闭');
+                            wsConnecting.value = false;
+                            streamingWs.value = null;
+                            // 3秒后自动重连（保持连接可用）
+                            setTimeout(() => {
+                                if (!isRecording.value) {
+                                    preConnectWebSocket();
+                                }
+                            }, 3000);
+                        };
+                    } catch (error) {
+                        console.error('❌ WebSocket 创建失败:', error);
+                        wsConnecting.value = false;
+                        streamingWs.value = null;
+                    }
+                };
+
                 onMounted(() => {
                     document.addEventListener('click', handleClickOutside);
+                    // 页面加载后预连接 WebSocket
+                    preConnectWebSocket();
                 });
                 
                 // 组件卸载时移除监听
                 onUnmounted(() => {
                     document.removeEventListener('click', handleClickOutside);
+                    // 清理 WebSocket 连接
+                    if (streamingWs.value) {
+                        streamingWs.value.close();
+                        streamingWs.value = null;
+                    }
                 });
                 
                 // 存储对话历史 (发送给后端的格式)
@@ -604,73 +770,70 @@
                 };
 
                 const sendMessage = async () => {
-                    if ((!inputMessage.value.trim() && selectedImages.value.length === 0) || isLoading.value) return;
+                    // 检查是否有内容或图片
+                    if (!inputMessage.value.trim() && pendingImages.value.length === 0) return;
 
-                    // 停止当前TTS播放
-                    stopTTS();
-
-                    const userMsg = inputMessage.value.trim();
-                    const images = [...selectedImages.value]; // 复制图片数组
-                    inputMessage.value = '';
-                    selectedImages.value = []; // 清空已选图片
+                    // 🔑 防御1: 取消正在进行的AI请求
+                    if (currentAIAbortController.value) {
+                        console.log('🛑 取消正在进行的AI请求');
+                        currentAIAbortController.value.abort();
+                        currentAIAbortController.value = null;
+                    }
                     
-                    // 1. 添加用户消息到界面（包含图片）
-                    const userMessage = { 
-                        role: 'user', 
-                        content: userMsg || '发送了图片',
-                        images: images.map(img => img.preview) // 保存预览URL用于显示
+                    // 🔑 防御2: 停止当前TTS播放
+                    stopTTS();
+                    
+                    // 🔑 防御3: 如果最后一条消息是AI且正在播放TTS，撤回该消息
+                    const lastMsg = history.value[history.value.length - 1];
+                    if (lastMsg && lastMsg.role === 'assistant' && isTTSPlaying.value) {
+                        console.log('🛑 撤回正在播放TTS的AI消息');
+                        history.value.pop();
+                    }
+
+                    const userMsg = inputMessage.value.trim() || '请看这张图片';
+                    inputMessage.value = '';
+                    
+                    // 构建用户消息
+                    const userMessage = {
+                        role: 'user',
+                        content: userMsg
                     };
+                    
+                    // 如果有待发送的图片，添加到消息中
+                    if (pendingImages.value.length > 0) {
+                        userMessage.images = [...pendingImages.value];
+                        userMessage.displayText = pendingImages.value.length > 0 ? `📷 ${userMsg}` : userMsg;
+                        pendingImages.value = []; // 清空待发送列表
+                    }
+                    
+                    // 1. 添加用户消息到界面
                     history.value.push(userMessage);
                     await scrollToBottom();
                     
                     isLoading.value = true;
+                    isWaitingAI.value = true;
 
                     try {
-                        // 2. 保存图片的base64数据到消息对象中（用于后续对话）
-                        if (images.length > 0) {
-                            userMessage.imageData = images.map(img => ({
-                                base64: img.base64.split(',')[1], // 移除data:image/...;base64,前缀
-                                mime_type: img.file.type
-                            }));
-                        }
+                        // 2. 调用 /chat/next 接口（支持取消）
+                        const abortController = new AbortController();
+                        currentAIAbortController.value = abortController;
                         
-                        // 3. 准备发送数据（包含图片的base64）
-                        const requestData = {
-                            history: history.value.map(msg => {
-                                const msgData = {
-                                    role: msg.role,
-                                    content: msg.content
-                                };
-                                // 如果消息包含图片数据，添加到请求中
-                                if (msg.imageData && msg.imageData.length > 0) {
-                                    msgData.images = msg.imageData;
-                                }
-                                return msgData;
-                            }),
-                            model: selectedModel.value
-                        };
-                        
-                        // 打印调试信息
-                        console.log('📤 [前端] 发送请求到 /api/chat/next');
-                        console.log('📸 [前端] 历史消息数量:', requestData.history.length);
-                        requestData.history.forEach((msg, i) => {
-                            const hasImages = msg.images && msg.images.length > 0;
-                            console.log(`  消息 ${i+1}: role=${msg.role}, 有图片=${hasImages}, 图片数量=${msg.images ? msg.images.length : 0}`);
-                            if (hasImages) {
-                                msg.images.forEach((img, j) => {
-                                    console.log(`    图片 ${j+1}: mime_type=${img.mime_type}, base64长度=${img.base64.length}`);
-                                });
-                            }
-                        });
-                        
-                        // 4. 调用 /chat/next 接口
                         const response = await fetch(`${API_BASE}/chat/next`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(requestData)
+                            body: JSON.stringify({ 
+                                history: history.value,
+                                model: selectedModel.value 
+                            }),
+                            signal: abortController.signal
                         });
                         
                         const data = await response.json();
+                        
+                        // 🔑 关键：LLM响应后立即关闭loading，不等TTS
+                        isLoading.value = false;
+                        isWaitingAI.value = false;
+                        currentAIAbortController.value = null;
 
                         if (data.status === 'continue') {
                             // AI 继续提问，可能包含选项
@@ -681,7 +844,7 @@
                                 selectedOptions: []
                             };
                             
-                            // 使用协调的TTS显示函数
+                            // 使用协调的TTS显示函数（不阻塞UI）
                             await displayAIMessageWithTTS(aiMessage);
                         } else if (data.status === 'stop') {
                             // AI 决定停止提问，开始诊断
@@ -696,14 +859,24 @@
                         }
 
                     } catch (error) {
+                        isLoading.value = false;
+                        isWaitingAI.value = false;
+                        currentAIAbortController.value = null;
+                        
+                        // 如果是用户主动取消，不显示错误
+                        if (error.name === 'AbortError') {
+                            console.log('✅ AI请求已被用户取消');
+                            return;
+                        }
+                        
                         console.error('Network Error:', error);
+                        
                         const errorMessage = '网络连接失败，请检查您的网络。';
                         const errorAIMessage = { role: 'assistant', content: errorMessage };
                         
                         // 使用协调的TTS显示函数显示错误消息
                         await displayAIMessageWithTTS(errorAIMessage);
                     } finally {
-                        isLoading.value = false;
                         await scrollToBottom();
                     }
                 };
@@ -739,18 +912,28 @@
                     message.selectedOptions = [];
                     
                     isLoading.value = true;
+                    isWaitingAI.value = true;
 
                     try {
+                        const abortController = new AbortController();
+                        currentAIAbortController.value = abortController;
+                        
                         const response = await fetch(`${API_BASE}/chat/next`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
                                 history: history.value,
                                 model: selectedModel.value 
-                            })
+                            }),
+                            signal: abortController.signal
                         });
                         
                         const data = await response.json();
+                        
+                        // 🔑 关键：LLM响应后立即关闭loading，不等TTS
+                        isLoading.value = false;
+                        isWaitingAI.value = false;
+                        currentAIAbortController.value = null;
 
                         if (data.status === 'continue') {
                             const aiMessage = {
@@ -774,10 +957,22 @@
                         }
 
                     } catch (error) {
-                        console.error('Network Error:', error);
-                        history.value.push({ role: 'assistant', content: '网络连接失败，请检查您的网络。' });
-                    } finally {
                         isLoading.value = false;
+                        isWaitingAI.value = false;
+                        currentAIAbortController.value = null;
+                        
+                        // 如果是用户主动取消，不显示错误
+                        if (error.name === 'AbortError') {
+                            console.log('✅ AI请求已被用户取消');
+                            return;
+                        }
+                        
+                        console.error('Network Error:', error);
+                        
+                        const errorMessage = '网络连接失败，请检查您的网络。';
+                        const errorAIMessage = { role: 'assistant', content: errorMessage };
+                        await displayAIMessageWithTTS(errorAIMessage);
+                    } finally {
                         await scrollToBottom();
                     }
                 };
@@ -844,101 +1039,97 @@
                         // 为了 UI 完整，也可以把诊断结果作为一条消息存入 history，或者只显示卡片
                         // 这里选择只显示卡片
                     } catch (error) {
-                        console.error('Diagnosis Error:', error);
-                        alert('生成诊断报告失败，请重试');
+                        console.error('❌ 诊断报告生成失败:', error);
+                        // 静默处理，不弹窗打扰用户
                     }
                 };
 
                 const resetChat = () => {
                     if (confirm('确定要清除当前对话重新开始吗？')) {
+                        // 取消正在进行的AI请求
+                        if (currentAIAbortController.value) {
+                            currentAIAbortController.value.abort();
+                            currentAIAbortController.value = null;
+                        }
+                        
+                        // 停止TTS
+                        stopTTS();
+                        
                         history.value = [];
                         diagnosis.value = null;
                         inputMessage.value = '';
                         isLoading.value = false;
-                        selectedImages.value = []; // 清空已选图片
+                        isWaitingAI.value = false;
                     }
                 };
 
-                // 图片处理函数
-                const triggerCamera = () => {
-                    // 移动端：触发相机
-                    if (cameraInput.value) {
-                        cameraInput.value.click();
+                // 图片预览和关闭
+                const previewImage = (url) => {
+                    previewImageUrl.value = url;
+                };
+                
+                const closeImagePreview = () => {
+                    previewImageUrl.value = null;
+                };
+                
+                // 移除待发送的图片
+                const removeImage = (index) => {
+                    pendingImages.value.splice(index, 1);
+                };
+                
+                // 处理图片选择（通用函数）
+                const handleImageSelection = async (file) => {
+                    if (!file) return;
+                    
+                    // 检查文件大小（限制5MB）
+                    if (file.size > 5 * 1024 * 1024) {
+                        alert('图片大小不能超过5MB');
+                        return;
+                    }
+                    
+                    console.log('📸 选择了图片:', file.name, file.type, file.size);
+                    
+                    try {
+                        // 读取图片为base64
+                        const reader = new FileReader();
+                        const base64 = await new Promise((resolve, reject) => {
+                            reader.onload = () => {
+                                const result = reader.result;
+                                const base64Data = result.split(',')[1];
+                                resolve(base64Data);
+                            };
+                            reader.onerror = reject;
+                            reader.readAsDataURL(file);
+                        });
+                        
+                        // 添加到待发送列表
+                        pendingImages.value.push({
+                            base64: base64,
+                            mime_type: file.type,
+                            name: file.name
+                        });
+                        
+                        console.log('📸 图片已添加到待发送列表');
+                        
+                    } catch (error) {
+                        console.error('❌ 图片处理失败:', error);
+                        alert('图片处理失败，请重试');
                     }
                 };
                 
-                const triggerFileInput = () => {
-                    // 桌面端：触发文件选择
-                    if (fileInput.value) {
-                        fileInput.value.click();
-                    }
-                };
-
-                const handleFileSelect = async (event) => {
-                    const files = event.target.files;
-                    if (!files || files.length === 0) return;
-
-                    for (let file of files) {
-                        // 验证文件类型
-                        if (!file.type.startsWith('image/')) {
-                            alert('请选择图片文件！');
-                            continue;
-                        }
-
-                        // 验证文件大小（限制为5MB）
-                        if (file.size > 5 * 1024 * 1024) {
-                            alert('图片大小不能超过5MB！');
-                            continue;
-                        }
-
-                        // 读取图片并创建预览
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            selectedImages.value.push({
-                                file: file,
-                                preview: e.target.result,
-                                base64: e.target.result
-                            });
-                        };
-                        reader.readAsDataURL(file);
-                    }
-
-                    // 清空input，允许重复选择同一文件
-                    event.target.value = '';
-                };
-
-                const removeImage = (index) => {
-                    selectedImages.value.splice(index, 1);
-                };
-
-                const openImagePreview = (imgUrl) => {
-                    // 创建模态框预览图片，而不是跳转
-                    const modal = document.createElement('div');
-                    modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4';
-                    modal.style.cursor = 'zoom-out';
+                // 相机按钮：调用摄像头拍照
+                const handleCamera = () => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.capture = 'environment'; // 移动端调用摄像头（优先后置摄像头）
+                    input.multiple = false;
                     
-                    const img = document.createElement('img');
-                    img.src = imgUrl;
-                    img.className = 'max-w-full max-h-full object-contain rounded-lg';
-                    
-                    modal.appendChild(img);
-                    document.body.appendChild(modal);
-                    
-                    // 点击任意位置关闭
-                    modal.addEventListener('click', () => {
-                        document.body.removeChild(modal);
-                    });
-                    
-                    // ESC键关闭
-                    const handleEsc = (e) => {
-                        if (e.key === 'Escape') {
-                            if (document.body.contains(modal)) {
-                                document.body.removeChild(modal);
-                            }
-                            document.removeEventListener('keydown', handleEsc);
-                        }
+                    input.onchange = async (e) => {
+                        await handleImageSelection(e.target.files[0]);
                     };
-                    document.addEventListener('keydown', handleEsc);
+                    
+                    input.click();
                 };
 
                 const toggleVoiceMode = () => {
@@ -952,81 +1143,313 @@
                     }
                 };
 
+                // 录音开始时间（用于检测录音时长）
+                const recordingStartTime = ref(0);
+                const MIN_RECORDING_DURATION = 500; // 最小录音时长（毫秒）
+                
+                // 🔑 用于处理快速松开的标记
+                const shouldStopRecording = ref(false);
+                const stopRecordingTimer = ref(null);
+                
                 const startRecording = async () => {
                     if (isRecording.value) return;
                     
-                    // 停止当前TTS播放
+                    // 🔑 防御1: 取消正在进行的AI请求
+                    if (currentAIAbortController.value) {
+                        console.log('🛑 取消正在进行的AI请求');
+                        currentAIAbortController.value.abort();
+                        currentAIAbortController.value = null;
+                        isWaitingAI.value = false;
+                    }
+                    
+                    // 🔑 防御2: 停止当前TTS播放
                     stopTTS();
                     
+                    // 🔑 防御3: 如果最后一条消息是AI且正在播放TTS，撤回该消息
+                    const lastMsg = history.value[history.value.length - 1];
+                    if (lastMsg && lastMsg.role === 'assistant' && isTTSPlaying.value) {
+                        console.log('🛑 撤回正在播放TTS的AI消息');
+                        history.value.pop();
+                    }
+                    
+                    // 🔑 清除之前的停止标记
+                    shouldStopRecording.value = false;
+                    if (stopRecordingTimer.value) {
+                        clearTimeout(stopRecordingTimer.value);
+                        stopRecordingTimer.value = null;
+                    }
+                    
+                    // 🔑 记录开始时间
+                    recordingStartTime.value = Date.now();
+                    
+                    // 🔑 清空临时识别文本
+                    console.log('🧹 清空识别文本，当前值:', streamingText.value);
+                    streamingText.value = '';
+                    console.log('🧹 清空后值:', streamingText.value);
+                    
                     try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ 
-                            audio: true
-                        });
+                        console.log('🎤 开始流式录音识别，WebSocket状态:', streamingWs.value ? streamingWs.value.readyState : 'null');
                         
-                        mediaRecorder.value = new MediaRecorder(stream, {
-                            mimeType: 'audio/webm;codecs=opus'
-                        });
-                        
-                        audioChunks.value = [];
-                        mediaRecorder.value.ondataavailable = (event) => {
-                            if (event.data.size > 0) {
-                                audioChunks.value.push(event.data);
+                        // 检查 WebSocket 状态
+                        const startAudioCapture = async () => {
+                            console.log('✅ WebSocket 已就绪，开始录音');
+                            // 发送开始命令
+                            streamingWs.value.send(JSON.stringify({ action: 'start' }));
+                            
+                            // 获取麦克风流
+                            const stream = await navigator.mediaDevices.getUserMedia({ 
+                                audio: {
+                                    sampleRate: 16000,
+                                    channelCount: 1,
+                                    echoCancellation: true,
+                                    noiseSuppression: true
+                                }
+                            });
+                            
+                            // 使用 AudioContext 处理音频
+                            audioContext.value = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                            const source = audioContext.value.createMediaStreamSource(stream);
+                            
+                            // 创建 ScriptProcessor 来获取音频数据
+                            const processor = audioContext.value.createScriptProcessor(4096, 1, 1);
+                            
+                            processor.onaudioprocess = (e) => {
+                                if (!isRecording.value) return;
+                                
+                                const inputData = e.inputBuffer.getChannelData(0);
+                                // 转换为 Int16Array (PCM)
+                                const pcmData = new Int16Array(inputData.length);
+                                for (let i = 0; i < inputData.length; i++) {
+                                    const s = Math.max(-1, Math.min(1, inputData[i]));
+                                    pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                                }
+                                
+                                // 发送音频数据
+                                if (streamingWs.value && streamingWs.value.readyState === WebSocket.OPEN) {
+                                    streamingWs.value.send(pcmData.buffer);
+                                }
+                            };
+                            
+                            source.connect(processor);
+                            processor.connect(audioContext.value.destination);
+                            
+                            // 保存引用以便停止时清理
+                            audioWorklet.value = { stream, processor, source };
+                            
+                            // 🔑 关键：录音真正开始后才设置状态
+                            isRecording.value = true;
+                            console.log('🔴 正在录音...');
+                            
+                            // 🔑 检查是否在录音开始前就已经松手了
+                            if (shouldStopRecording.value) {
+                                console.log('⚡ 检测到快速松开，立即停止录音');
+                                // 立即调用停止逻辑
+                                setTimeout(() => stopRecording(), 0);
                             }
                         };
                         
-                        mediaRecorder.value.start();
-                        isRecording.value = true;
-                        window.recordingStartTime = Date.now();
-                        console.log('开始录音');
+                        // 如果 WebSocket 已连接，立即开始
+                        if (streamingWs.value && streamingWs.value.readyState === WebSocket.OPEN) {
+                            await startAudioCapture();
+                        } else {
+                            // WebSocket 未连接，重新建立连接
+                            console.log('⏳ WebSocket 未就绪，正在连接...');
+                            preConnectWebSocket();
+                            
+                            // 等待连接成功
+                            const waitForConnection = setInterval(async () => {
+                                if (streamingWs.value && streamingWs.value.readyState === WebSocket.OPEN) {
+                                    clearInterval(waitForConnection);
+                                    await startAudioCapture();
+                                }
+                            }, 50);
+                            
+                            // 3秒超时
+                            setTimeout(() => {
+                                clearInterval(waitForConnection);
+                                if (!isRecording.value) {
+                                    console.error('❌ WebSocket连接超时');
+                                    streamingText.value = '';
+                                }
+                            }, 3000);
+                        }
                         
                     } catch (error) {
-                        console.error('无法访问麦克风:', error);
-                        alert('无法访问麦克风，请检查权限设置');
+                        console.error('❌ 无法访问麦克风:', error);
+                        // 静默处理，不弹窗打扰用户
+                        streamingText.value = '';
                     }
                 };
 
-                const stopRecording = () => {
-                    if (isRecording.value && mediaRecorder.value) {
-                        // 立即更新UI状态，避免延迟
-                        isRecording.value = false;
+                const stopRecording = async () => {
+                    // 🔑 如果录音还没真正开始，设置标记等待
+                    if (!isRecording.value) {
+                        console.log('⏳ 录音尚未开始，设置停止标记');
+                        shouldStopRecording.value = true;
                         
-                        // 异步停止录音，避免阻塞UI
-                        setTimeout(() => {
-                            mediaRecorder.value.stop();
-                            console.log('停止录音');
-                        }, 0);
-
-                        // 监听录音停止事件
-                        mediaRecorder.value.onstop = () => {
-                            // 停止所有音轨（立即清理，避免验证失败时麦克风仍活跃）
-                            if (mediaRecorder.value && mediaRecorder.value.stream) {
-                                mediaRecorder.value.stream.getTracks().forEach(track => track.stop());
+                        // 🔑 设置超时：如果1秒后还没开始录音，直接清理
+                        stopRecordingTimer.value = setTimeout(() => {
+                            if (!isRecording.value && shouldStopRecording.value) {
+                                console.log('⏱️  录音启动超时，清理状态');
+                                shouldStopRecording.value = false;
+                                streamingText.value = '';
+                            }
+                        }, 1000);
+                        
+                        return;
+                    }
+                    
+                    // 🔑 检查录音时长
+                    const recordingDuration = Date.now() - recordingStartTime.value;
+                    console.log(`⏸️  停止录音 (时长: ${recordingDuration}ms)`);
+                    
+                    isRecording.value = false;
+                    
+                    // 🔑 如果录音时间太短，直接取消
+                    if (recordingDuration < MIN_RECORDING_DURATION) {
+                        console.warn(`⚠️  录音时间过短 (${recordingDuration}ms < ${MIN_RECORDING_DURATION}ms)，已取消`);
+                        
+                        try {
+                            // 清理音频资源
+                            if (audioWorklet.value) {
+                                audioWorklet.value.processor.disconnect();
+                                audioWorklet.value.source.disconnect();
+                                audioWorklet.value.stream.getTracks().forEach(track => track.stop());
+                                audioWorklet.value = null;
                             }
                             
-                            // 创建音频Blob
-                            const recordingDuration = Date.now() - window.recordingStartTime;
-                            const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm;codecs=opus' });
-                            console.log('录音完成，音频大小:', audioBlob.size, 'bytes, 时长:', recordingDuration, 'ms');
-                            
-                            // 静默验证，不打扰用户
-                            if (audioBlob.size < 1000) {
-                                console.log('音频文件过小，忽略本次录音');
-                                mediaRecorder.value = null;
-                                audioChunks.value = [];
-                                return;
+                            if (audioContext.value) {
+                                await audioContext.value.close();
+                                audioContext.value = null;
                             }
                             
-                            // 保存音频数据供STT使用
-                            window.lastAudioBlob = audioBlob;
-                            window.lastRecordingDuration = recordingDuration;
+                            streamingText.value = '';
+                            console.log('✅ 已取消短时录音');
+                        } catch (error) {
+                            console.error('清理资源错误:', error);
+                        }
+                        
+                        return; // 直接返回，不继续处理
+                    }
+                    
+                    try {
+                        // 发送停止命令
+                        if (streamingWs.value && streamingWs.value.readyState === WebSocket.OPEN) {
+                            streamingWs.value.send(JSON.stringify({ action: 'stop' }));
+                        }
+                        
+                        // 清理音频资源
+                        if (audioWorklet.value) {
+                            audioWorklet.value.processor.disconnect();
+                            audioWorklet.value.source.disconnect();
+                            audioWorklet.value.stream.getTracks().forEach(track => track.stop());
+                            audioWorklet.value = null;
+                        }
+                        
+                        if (audioContext.value) {
+                            await audioContext.value.close();
+                            audioContext.value = null;
+                        }
+                        
+                        // 等待最终结果
+                        setTimeout(async () => {
+                            console.log('🔍 [500ms后] 检查识别文本:', streamingText.value);
                             
-                            // 清理状态
-                            mediaRecorder.value = null;
-                            audioChunks.value = [];
+                            const recognizedText = streamingText.value.trim();
+                            console.log('🔍 [500ms后] trim后的文本:', recognizedText, '长度:', recognizedText.length);
                             
-                            // 触发STT处理
-                            processVoiceInput();
-                        };
+                            if (recognizedText) {
+                                // 使用识别的文本继续对话
+                                console.log('✅ 识别完成，准备发送:', recognizedText);
+                                
+                                // 🔑 松手后创建语音消息气泡
+                                const voiceMessage = {
+                                    role: 'user',
+                                    content: recognizedText,
+                                    displayText: `🎤 ${recognizedText}`,
+                                    isVoice: true
+                                };
+                                history.value.push(voiceMessage);
+                                await scrollToBottom();
+                                
+                                // 直接调用 AI 对话
+                                isLoading.value = true;
+                                isWaitingAI.value = true;
+                                
+                                try {
+                                    const abortController = new AbortController();
+                                    currentAIAbortController.value = abortController;
+                                    
+                                    const response = await fetch(`${API_BASE}/chat/next`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            history: history.value.map(msg => ({
+                                                role: msg.role,
+                                                content: msg.content || msg.displayText
+                                            }))
+                                        }),
+                                        signal: abortController.signal
+                                    });
+                                    
+                                    if (!response.ok) {
+                                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                    }
+                                    
+                                    const data = await response.json();
+                                    console.log('📥 AI 响应数据:', data);
+                                    
+                                    // 🔑 关键：LLM响应后立即关闭loading，不等TTS
+                                    isLoading.value = false;
+                                    isWaitingAI.value = false;
+                                    currentAIAbortController.value = null;
+                                    
+                                    if (data.question) {
+                                        // 构造 AI 消息对象（包含 options）
+                                        const aiMessage = {
+                                            role: 'assistant',
+                                            content: data.question,
+                                            options: data.options || [],
+                                            selectedOptions: []
+                                        };
+                                        await displayAIMessageWithTTS(aiMessage);
+                                    } else {
+                                        console.warn('⚠️  AI 没有返回问题');
+                                    }
+                                    
+                                    if (data.diagnosis) {
+                                        diagnosis.value = data.diagnosis;
+                                        await scrollToBottom();
+                                    }
+                                } catch (error) {
+                                    isLoading.value = false;
+                                    isWaitingAI.value = false;
+                                    currentAIAbortController.value = null;
+                                    
+                                    // 如果是用户主动取消，不显示错误
+                                    if (error.name === 'AbortError') {
+                                        console.log('✅ AI请求已被用户取消');
+                                        // 清理
+                                        streamingText.value = '';
+                                        return;
+                                    }
+                                    
+                                    console.error('❌ AI 响应错误:', error);
+                                }
+                                
+                                // 清理
+                                streamingText.value = '';
+                            } else {
+                                console.warn('⚠️  没有识别到文本，跳过 AI 对话');
+                                streamingText.value = '';
+                            }
+                            
+                            // 保持 WebSocket 连接（下次使用更快）
+                            console.log('✅ 保持 WebSocket 连接，下次使用零延迟');
+                        }, 500); // 给一点时间接收最终结果
+                        
+                    } catch (error) {
+                        console.error('停止录音错误:', error);
                     }
                 };
 
@@ -1035,9 +1458,19 @@
                     toggleVoiceMode();
                 };
 
+                // 加号按钮：从图库选择图片
                 const handleAdd = () => {
-                    // TODO: 实现添加功能（图片上传等）
-                    console.log('添加功能待实现');
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    // 不设置 capture 属性，让用户从图库选择
+                    input.multiple = false;
+                    
+                    input.onchange = async (e) => {
+                        await handleImageSelection(e.target.files[0]);
+                    };
+                    
+                    input.click();
                 };
 
                 // 处理语音输入
@@ -1149,6 +1582,9 @@
                         
                         console.log('🎤 [AI对话] 收到AI响应，正在处理...');
                         const data = await response.json();
+                        
+                        // 🔑 关键：LLM响应后立即关闭loading，不等TTS
+                        isLoading.value = false;
 
                         if (data.status === 'continue') {
                             console.log('🎤 [AI对话] AI回复状态: continue (继续提问)');
@@ -1180,6 +1616,8 @@
 
                     } catch (error) {
                         console.error('🎤 [AI对话] 网络错误:', error);
+                        isLoading.value = false;  // 出错时也要关闭loading
+                        
                         const errorMessage = '网络连接失败，请检查您的网络。';
                         const errorAIMessage = { role: 'assistant', content: errorMessage };
                         
@@ -1187,7 +1625,6 @@
                         // 使用协调的TTS显示函数显示错误消息
                         await displayAIMessageWithTTS(errorAIMessage);
                     } finally {
-                        isLoading.value = false;
                         await scrollToBottom();
                         console.log('🎤 [语音处理] 语音输入处理流程完成');
                     }
@@ -1265,82 +1702,178 @@
                     }
                 };
 
-                // 协调显示AI消息和播放TTS
+                // 协调显示AI消息和播放TTS（真正的流式版本 - 使用Web Audio API）
                 const displayAIMessageWithTTS = async (aiMessage) => {
-                    if (isTTSEnabled.value) {
-                        // TTS开启时，先获取音频再显示文字
-                        try {
-                            const ttsResponse = await fetch('/api/chat/tts', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ text: aiMessage.content })
-                            });
+                    // 🎯 真正的流式播放：收到第一个PCM包立即开始播放，边播放边接收
+                    
+                    // 🔑 防御1: 检查最后一条消息，防止AI连续发送两条消息
+                    const lastMsg = history.value[history.value.length - 1];
+                    if (lastMsg && lastMsg.role === 'assistant') {
+                        console.warn('⚠️  检测到AI连续发送消息，跳过本次消息');
+                        return;
+                    }
+                    
+                    if (!isTTSEnabled.value) {
+                        // TTS关闭，直接显示文字
+                        history.value.push(aiMessage);
+                        await scrollToBottom();
+                        console.log('💬 [TTS关闭] AI消息已显示');
+                        return;
+                    }
+                    
+                    try {
+                        console.log('🎤 [TTS] 开始流式TTS请求...');
+                        
+                        // 🔑 标记TTS正在播放
+                        isTTSPlaying.value = true;
+                        
+                        // 1. 发起流式TTS请求（PCM格式）
+                        const ttsResponse = await fetch('/api/chat/tts-stream', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: aiMessage.content })
+                        });
+                        
+                        if (!ttsResponse.ok) {
+                            console.error('TTS请求失败:', ttsResponse.status);
+                            history.value.push(aiMessage);
+                            await scrollToBottom();
+                            isTTSPlaying.value = false;
+                            return;
+                        }
+                        
+                        console.log('🎤 [TTS] 开始接收PCM音频流...');
+                        
+                        // 2. 创建Web Audio API上下文
+                        const audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                            sampleRate: 24000
+                        });
+                        
+                        // 🔑 追踪当前的AudioContext和Reader，以便中断
+                        currentTTSContext.value = audioCtx;
+                        
+                        let firstChunkReceived = false;
+                        let chunkCount = 0;
+                        
+                        // 🔑 关键：用于串联播放的时间点
+                        let nextStartTime = audioCtx.currentTime;
+                        
+                        // 3. 使用ReadableStream逐块接收并串联播放PCM音频
+                        const reader = ttsResponse.body.getReader();
+                        
+                        // 🔑 追踪Reader以便中断
+                        currentTTSReader.value = reader;
+                        
+                        while (true) {
+                            const { done, value } = await reader.read();
                             
-                            if (ttsResponse.ok) {
-                                let audioBlob;
-                                const contentType = ttsResponse.headers.get('content-type');
-                                
-                                if (contentType && contentType.includes('application/json')) {
-                                    // Vercel服务器：处理base64编码的音频
-                                    const result = await ttsResponse.json();
-                                    const audioBase64 = result.audio_data;
-                                    if (audioBase64) {
-                                        const audioBytes = atob(audioBase64);
-                                        const audioArray = new Uint8Array(audioBytes.length);
-                                        for (let i = 0; i < audioBytes.length; i++) {
-                                            audioArray[i] = audioBytes.charCodeAt(i);
-                                        }
-                                        audioBlob = new Blob([audioArray], { type: 'audio/mpeg' });
-                                    }
-                                } else {
-                                    // 本地server：直接使用blob响应
-                                    audioBlob = await ttsResponse.blob();
-                                }
-                                
-                                if (audioBlob) {
-                                    const audioUrl = URL.createObjectURL(audioBlob);
-                                    currentAudioUrl.value = audioUrl;  // 跟踪当前URL
-                                    
-                                    // 显示文字并播放音频
-                                    history.value.push(aiMessage);
-                                    await scrollToBottom();
-                                    
-                                    const audio = new Audio(audioUrl);
-                                    currentAudio.value = audio;  // 跟踪当前音频实例
-                                    
-                                    audio.play().catch(error => {
-                                        console.error('音频播放失败:', error);
-                                        currentAudio.value = null;
-                                        currentAudioUrl.value = null;
-                                    });
-                                    
-                                    audio.onended = () => {
-                                        URL.revokeObjectURL(audioUrl);
-                                        currentAudio.value = null;
-                                        currentAudioUrl.value = null;
-                                    };
-                                } else {
-                                    // 音频获取失败，只显示文字
-                                    history.value.push(aiMessage);
-                                    await scrollToBottom();
-                                }
-                            } else {
-                                // TTS失败，只显示文字
-                                history.value.push(aiMessage);
-                                await scrollToBottom();
+                            // 🔑 检查是否被中断
+                            if (!isTTSPlaying.value) {
+                                console.log('🛑 [TTS] 检测到中断信号，停止播放');
+                                reader.cancel();
+                                audioCtx.close();
+                                return;
                             }
-                        } catch (error) {
-                            console.error('TTS功能出错:', error);
-                            currentAudio.value = null;
-                            currentAudioUrl.value = null;
-                            // TTS失败，只显示文字
+                            
+                            if (value && value.length > 0) {
+                                chunkCount++;
+                                
+                                // 收到第一个音频块 - 立即显示文字气泡
+                                if (!firstChunkReceived) {
+                                    firstChunkReceived = true;
+                                    console.log('⚡ [TTS] 收到首个PCM音频包，立即显示文字并开始播放');
+                                    
+                                    // 显示AI消息
+                                    history.value.push(aiMessage);
+                                    await scrollToBottom();
+                                }
+                                
+                                // 将PCM数据转换为AudioBuffer并串联播放
+                                try {
+                                    // PCM是16位小端格式，需要转换为Float32
+                                    const pcmData = new Int16Array(value.buffer);
+                                    const floatData = new Float32Array(pcmData.length);
+                                    
+                                    for (let i = 0; i < pcmData.length; i++) {
+                                        floatData[i] = pcmData[i] / 32768.0; // 转换为[-1, 1]范围
+                                    }
+                                    
+                                    // 创建AudioBuffer
+                                    const audioBuffer = audioCtx.createBuffer(1, floatData.length, 24000);
+                                    audioBuffer.getChannelData(0).set(floatData);
+                                    
+                                    // 创建音频源并串联播放
+                                    const source = audioCtx.createBufferSource();
+                                    source.buffer = audioBuffer;
+                                    source.connect(audioCtx.destination);
+                                    
+                                    // 🔑 关键：确保串联播放，不重叠
+                                    // 如果nextStartTime已经过去，从当前时间开始；否则从nextStartTime开始
+                                    const startTime = Math.max(nextStartTime, audioCtx.currentTime);
+                                    source.start(startTime);
+                                    
+                                    // 更新下一个音频块的开始时间
+                                    nextStartTime = startTime + audioBuffer.duration;
+                                    
+                                    console.log(`🔊 [TTS] 串联播放音频块 #${chunkCount}: ${floatData.length}采样点, 时长${(audioBuffer.duration * 1000).toFixed(0)}ms`);
+                                    
+                                } catch (err) {
+                                    console.error('播放音频块失败:', err);
+                                }
+                            }
+                            
+                            if (done) {
+                                console.log('✅ [TTS] 音频流接收完成');
+                                break;
+                            }
+                        }
+                        
+                        // 如果没收到任何音频数据但也没显示文字，补救显示
+                        if (!firstChunkReceived) {
+                            console.warn('⚠️  [TTS] 未收到音频数据，直接显示文字');
                             history.value.push(aiMessage);
                             await scrollToBottom();
                         }
-                    } else {
-                        // TTS关闭，只显示文字
-                        history.value.push(aiMessage);
-                        await scrollToBottom();
+                        
+                        // 等待所有音频播放完成后关闭上下文
+                        const remainingTime = (nextStartTime - audioCtx.currentTime) * 1000;
+                        if (remainingTime > 0) {
+                            setTimeout(() => {
+                                // 只有当前AudioContext还是这个时才关闭（避免关闭新的）
+                                if (currentTTSContext.value === audioCtx) {
+                                    audioCtx.close();
+                                    currentTTSContext.value = null;
+                                    currentTTSReader.value = null;
+                                    isTTSPlaying.value = false;
+                                    console.log('✅ [TTS] 音频播放完成，关闭AudioContext');
+                                }
+                            }, remainingTime + 100);
+                        } else {
+                            if (currentTTSContext.value === audioCtx) {
+                                audioCtx.close();
+                                currentTTSContext.value = null;
+                                currentTTSReader.value = null;
+                                isTTSPlaying.value = false;
+                            }
+                        }
+                        
+                    } catch (error) {
+                        console.error('TTS功能出错:', error);
+                        // 清理引用
+                        if (currentTTSContext.value) {
+                            try {
+                                currentTTSContext.value.close();
+                            } catch (e) {}
+                            currentTTSContext.value = null;
+                            currentTTSReader.value = null;
+                        }
+                        isTTSPlaying.value = false;
+                        
+                        // 出错时确保文字能显示
+                        if (!history.value.includes(aiMessage)) {
+                            history.value.push(aiMessage);
+                            await scrollToBottom();
+                        }
                     }
                 };
 
@@ -1638,6 +2171,9 @@
                     getOptionEmoji,
                     getStepTypeColor,
                     getStepBorderColor,
+                    handleCamera,
+                    handleVoice,
+                    handleAdd,
                     isVoiceMode,
                     isRecording,
                     toggleVoiceMode,
@@ -1646,22 +2182,64 @@
                     mediaRecorder,
                     audioChunks,
                     isTTSEnabled,
+                    isTTSPlaying,
                     displayAIMessageWithTTS,
                     speakText,
                     processVoiceInput,
-                    // 图片相关
-                    selectedImages,
-                    fileInput,
-                    cameraInput,
-                    isMobile,
-                    triggerCamera,
-                    triggerFileInput,
-                    handleFileSelect,
-                    removeImage,
-                    openImagePreview
+                    previewImageUrl,
+                    pendingImages,
+                    previewImage,
+                    closeImagePreview,
+                    removeImage
                 };
             }
         }).mount('#app');
     </script>
+    
+    <script>
+        // 禁用右键菜单
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+        
+        // 禁用长按弹出菜单（移动端）
+        let longPressTimer = null;
+        document.addEventListener('touchstart', function(e) {
+            // 清除之前的定时器
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+            }
+            // 设置长按检测
+            longPressTimer = setTimeout(function() {
+                e.preventDefault();
+            }, 500);
+        }, { passive: false });
+        
+        document.addEventListener('touchend', function() {
+            // 清除长按定时器
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        });
+        
+        document.addEventListener('touchmove', function() {
+            // 移动时取消长按
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        });
+        
+        // 禁用选择文本（防止长按选择）
+        document.addEventListener('selectstart', function(e) {
+            // 允许在输入框中选择文本
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            e.preventDefault();
+        });
+    </script>
 </body>
 </html>
+

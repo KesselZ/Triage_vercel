@@ -2,7 +2,8 @@ import httpx
 import asyncio
 import os
 import base64
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, AsyncGenerator
+from .doubao_streaming_tts import DoubaoStreamingTTS
 
 async def speech_to_text(audio_data: bytes, filename: str = "audio.webm", mime_type: str = "audio/webm", language: str = "zh") -> Dict[str, Any]:
     """
@@ -49,7 +50,7 @@ async def speech_to_text(audio_data: bytes, filename: str = "audio.webm", mime_t
 
 async def text_to_speech(text: str) -> Dict[str, Any]:
     """
-    文字转语音 - 统一的TTS服务
+    文字转语音 - 使用豆包流式TTS（快速响应）
     
     Args:
         text: 要转换的文本
@@ -61,43 +62,73 @@ async def text_to_speech(text: str) -> Dict[str, Any]:
         if not text.strip():
             raise ValueError("Text cannot be empty")
         
-        if len(text) > 500:
-            raise ValueError("Text too long (max 500 characters)")
+        if len(text) > 2000:
+            raise ValueError("Text too long (max 2000 characters)")
         
-        # 获取API密钥（支持两种环境变量名）
-        api_key = os.getenv('UNIAPI_KEY') or os.getenv('UNIAPI_API_KEY')
-        if not api_key:
-            raise ValueError("API key not configured")
+        # 获取豆包凭证
+        app_id = os.getenv("DOUBAO_APP_ID", "9369539387")
+        access_key = os.getenv("DOUBAO_ACCESS_KEY", "EVHujvbAnGM-OW0T3WHHO1YF8ZHRzINa")
         
-        # 调用UniAPI TTS
-        url = "https://api.uniapi.io/v1/audio/speech"
+        # 创建豆包TTS客户端
+        tts_client = DoubaoStreamingTTS(
+            app_id=app_id,
+            access_key=access_key,
+            resource_id="seed-tts-1.0",
+            speaker="zh_female_tianxinxiaomei_emo_v2_mars_bigtts"
+        )
         
-        data = {
-            "model": "tts-1",
-            "input": text.strip(),
-            "voice": "alloy"
+        # 合成完整音频
+        audio_content = await tts_client.synthesize_full(text.strip())
+        
+        # 编码为base64返回
+        audio_base64 = base64.b64encode(audio_content).decode('utf-8')
+        
+        return {
+            "audio_data": audio_base64,
+            "format": "mp3"
         }
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            
-            # 将音频内容编码为base64返回
-            audio_content = response.content
-            audio_base64 = base64.b64encode(audio_content).decode('utf-8')
-            
-            return {
-                "audio_data": audio_base64,
-                "format": "mp3"
-            }
             
     except Exception as e:
         raise Exception(f"Text-to-speech failed: {str(e)}")
+
+
+async def text_to_speech_stream(text: str) -> AsyncGenerator[bytes, None]:
+    """
+    文字转语音 - 流式版本（边生成边返回）
+    
+    Args:
+        text: 要转换的文本
+    
+    Yields:
+        音频数据块 (bytes)
+    """
+    try:
+        if not text.strip():
+            raise ValueError("Text cannot be empty")
+        
+        if len(text) > 2000:
+            raise ValueError("Text too long (max 2000 characters)")
+        
+        # 获取豆包凭证
+        app_id = os.getenv("DOUBAO_APP_ID", "9369539387")
+        access_key = os.getenv("DOUBAO_ACCESS_KEY", "EVHujvbAnGM-OW0T3WHHO1YF8ZHRzINa")
+        
+        # 创建豆包TTS客户端（使用PCM格式支持真正的流式播放）
+        tts_client = DoubaoStreamingTTS(
+            app_id=app_id,
+            access_key=access_key,
+            resource_id="seed-tts-1.0",
+            speaker="zh_female_tianxinxiaomei_emo_v2_mars_bigtts",
+            audio_format="pcm",
+            sample_rate=24000
+        )
+        
+        # 流式合成并返回
+        async for audio_chunk in tts_client.synthesize_stream(text.strip()):
+            yield audio_chunk
+            
+    except Exception as e:
+        raise Exception(f"Text-to-speech streaming failed: {str(e)}")
 
 def decode_base64_audio(base64_data: str) -> bytes:
     """
