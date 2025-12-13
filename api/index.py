@@ -59,7 +59,9 @@ class TTSRequest(BaseModel):
 @app.post("/api/chat/next")
 async def chat_next(request: ChatRequest):
     """问诊接口"""
+    print("🚀 [FastAPI/index.py] Next question endpoint called - using FastAPI route")
     result = await get_next_question(request.history, request.model)
+    print("✅ [FastAPI/index.py] Next question completed successfully")
     return result
 
 @app.post("/api/chat/diagnose")
@@ -71,15 +73,19 @@ async def chat_diagnose(request: ChatRequest):
 @app.post("/api/chat/tts")
 async def text_to_speech_endpoint(request: TTSRequest):
     """文本转语音"""
+    print("🚀 [FastAPI/index.py] TTS endpoint called - using FastAPI route")
     try:
         result = await text_to_speech(request.text)
+        print("✅ [FastAPI/index.py] TTS completed successfully")
         return result
     except Exception as e:
+        print(f"❌ [FastAPI/index.py] TTS error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"TTS service error: {str(e)}")
 
 @app.post("/api/chat/stt")
 async def speech_to_text_endpoint(request: Request):
     """语音转文字 - 支持JSON和FormData格式"""
+    print("🚀 [FastAPI/index.py] STT endpoint called - using FastAPI route")
     try:
         content_type = request.headers.get("content-type", "")
         
@@ -114,6 +120,7 @@ async def speech_to_text_endpoint(request: Request):
             raise HTTPException(status_code=400, detail="File must be an audio file")
         
         result = await speech_to_text(audio_data, filename, mime_type, language)
+        print("✅ [FastAPI/index.py] STT completed successfully")
         return result
         
     except HTTPException:
