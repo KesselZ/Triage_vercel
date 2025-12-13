@@ -12,21 +12,57 @@ BASE_URL = os.getenv("UNIAPI_BASE_URL", "https://hk.uniapi.io/v1").rstrip("/")
 async def _create_chat_completion(
     *,
     model: str,
-    messages: List[Dict[str, str]],
+    messages: List[Dict[str, Any]],
     temperature: float = 0.3,
     max_tokens: int | None = None,
     response_format: Dict[str, Any] | None = None,
 ) -> str:
-    """调用 UniAPI(OpenAI 兼容) 的 /chat/completions 接口，返回 content 字符串。"""
+    """调用 UniAPI(OpenAI 兼容) 的 /chat/completions 接口，返回 content 字符串。
+    支持多模态输入（文本+图片）。
+    """
 
     if not API_KEY:
         raise RuntimeError("UNIAPI_API_KEY is not set in environment variables")
 
     url = f"{BASE_URL}/chat/completions"
 
+    # 处理消息，支持图片
+    processed_messages = []
+    for msg in messages:
+        if "images" in msg and msg["images"]:
+            # 构建多模态消息
+            content_parts = []
+            
+            # 添加文本部分
+            if msg.get("content"):
+                content_parts.append({
+                    "type": "text",
+                    "text": msg["content"]
+                })
+            
+            # 添加图片部分
+            for img in msg["images"]:
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{img['mime_type']};base64,{img['base64']}"
+                    }
+                })
+            
+            processed_messages.append({
+                "role": msg["role"],
+                "content": content_parts
+            })
+        else:
+            # 普通文本消息
+            processed_messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+
     payload: Dict[str, Any] = {
         "model": model,
-        "messages": messages,
+        "messages": processed_messages,
         "temperature": temperature,
     }
     if max_tokens is not None:
@@ -39,7 +75,7 @@ async def _create_chat_completion(
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:  # 增加超时时间以处理图片
         resp = await client.post(url, headers=headers, json=payload)
         resp.raise_for_status()
 
@@ -47,13 +83,15 @@ async def _create_chat_completion(
     # 兼容 OpenAI 风格的返回结构
     return data["choices"][0]["message"]["content"].strip()
 
-async def get_next_question(history: List[Dict[str, str]], model: str = "grok-4-1-fast-non-reasoning") -> Dict[str, Any]:
+async def get_next_question(history: List[Dict[str, Any]], model: str = "grok-4-1-fast-non-reasoning") -> Dict[str, Any]:
     """
     根据对话历史，决定是继续提问还是停止。
     """
     system_prompt = """你是一位温暖贴心的三甲医院分诊医生助手。你的任务是通过询问患者症状来收集信息，以便进行初步分诊。
 
 请用关怀、温暖的语气与患者交流，就像一位真正关心患者健康的医生。
+
+患者是可以上传照片的，如果有，请根据图片内容进行分析。
 
 规则：
 1. 每次只问**一个**最关键的补充问题。
@@ -74,6 +112,16 @@ async def get_next_question(history: List[Dict[str, str]], model: str = "grok-4-
 请严格按照JSON格式输出，不要包含任何markdown标记。"""
 
     messages = [{"role": "system", "content": system_prompt}]
+    
+    # 打印调试信息
+    print(f"📸 [AI Client] 处理历史消息，共 {len(history)} 条")
+    for i, msg in enumerate(history):
+        has_images = "images" in msg and msg.get("images")
+        print(f"  消息 {i+1}: role={msg.get('role')}, 有图片={has_images}, 图片数量={len(msg.get('images', []))}")
+        if has_images:
+            for j, img in enumerate(msg.get("images", [])):
+                print(f"    图片 {j+1}: mime_type={img.get('mime_type')}, base64长度={len(img.get('base64', ''))}")
+    
     messages.extend(history)
 
     try:
@@ -98,11 +146,11 @@ async def get_next_question(history: List[Dict[str, str]], model: str = "grok-4-
         print(f"Error calling AI: {e}")
         return {"status": "error", "message": str(e)}
 
-async def generate_diagnosis(history: List[Dict[str, str]], model: str = "grok-4-1-fast-non-reasoning") -> Dict[str, Any]:
+async def generate_diagnosis(history: List[Dict[str, Any]], model: str = "grok-4-1-fast-non-reasoning") -> Dict[str, Any]:
     """
     根据完整对话历史生成分诊报告。
     """
-    system_prompt = """你是一位专业的医生。根据以下的患病主诉和问诊记录，请生成一份结构化的分诊报告。
+    system_prompt = """你是一位专业的医生。根据以下的患病主诉和问诊记录（包括患者上传的图片），请生成一份结构化的分诊报告。
 请严格按照以下 JSON 格式输出，不要包含 Markdown 格式标记（如 ```json）：
 {
     "possible_conditions": ["疾病1", "疾病2"],
