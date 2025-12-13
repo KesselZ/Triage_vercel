@@ -32,7 +32,13 @@ app.add_middleware(
 )
 
 
-# 首页现在由 vercel.json 直接处理，不需要这个路由了
+@app.get("/")
+async def serve_index():
+    """返回前端首页 public/index.html"""
+    index_path = os.path.join(BASE_DIR, "..", "public", "index.html")
+    if not os.path.exists(index_path):
+        raise HTTPException(status_code=404, detail="index.html not found")
+    return FileResponse(index_path)
 
 
 class ChatRequest(BaseModel):
