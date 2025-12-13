@@ -10,7 +10,7 @@ import asyncio
 import json
 
 from .utils.ai_client import get_next_question, generate_diagnosis
-from .utils.voice_services import speech_to_text, text_to_speech, text_to_speech_stream, decode_base64_audio
+from .utils.voice_services import speech_to_text, text_to_speech_stream, decode_base64_audio
 from .utils.doubao_streaming_asr import DoubaoStreamingASR
 
 
@@ -72,17 +72,6 @@ async def chat_diagnose(request: ChatRequest):
     print("🔥 [FastAPI-index.py] /api/chat/diagnose 被调用")
     result = await generate_diagnosis(request.history, request.model)
     return result
-
-@app.post("/api/chat/tts")
-async def text_to_speech_endpoint(request: TTSRequest):
-    """文本转语音 - 完整返回版本（兼容旧接口）"""
-    print("🔥 [FastAPI-index.py] /api/chat/tts 被调用")
-    try:
-        result = await text_to_speech(request.text)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"TTS service error: {str(e)}")
-
 
 @app.post("/api/chat/tts-stream")
 async def text_to_speech_stream_endpoint(request: TTSRequest):

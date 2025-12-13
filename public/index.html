@@ -1506,11 +1506,6 @@
                     }
                 };
 
-                const handleVoice = () => {
-                    // 这个函数现在由 toggleVoiceMode 替代
-                    toggleVoiceMode();
-                };
-
                 // 加号按钮：从图库选择图片
                 const handleAdd = () => {
                     const input = document.createElement('input');
@@ -1524,235 +1519,6 @@
                     };
                     
                     input.click();
-                };
-
-                // 处理语音输入
-                const processVoiceInput = async () => {
-                    if (!window.lastAudioBlob) {
-                        console.log('🎤 [语音处理] 没有可用的音频数据');
-                        return;
-                    }
-
-                    console.log('🎤 [语音处理] 开始处理语音输入...');
-                    console.log('🎤 [语音处理] 音频文件大小:', window.lastAudioBlob.size, 'bytes');
-                    
-                    // 立即创建语音消息并显示，提供即时反馈
-                    const voiceMessage = {
-                        role: 'user',
-                        content: '[语音识别中...]',  // 临时内容，稍后更新
-                        displayText: '语音输入',  // UI显示
-                        isVoice: true
-                    };
-                    
-                    console.log('🎤 [语音处理] 立即显示语音消息气泡');
-                    history.value.push(voiceMessage);
-                    await scrollToBottom();
-                    
-                    console.log('🎤 [AI对话] 正在等待AI回复...');
-                    
-                    // 开始AI对话流程（包含STT处理）
-                    isLoading.value = true;
-                    try {
-                        // 在"分析中"阶段进行STT识别
-                        console.log('🎤 [语音识别] 在分析中阶段进行语音识别...');
-                        const startTime = Date.now();
-                        
-                        let transcribedText = '';
-                        
-                        try {
-                            // 使用真实录音音频进行STT识别
-                            console.log('🎤 [语音识别] 使用录音音频进行语音识别');
-                            
-
-                            // 将音频blob转换为base64
-                            const reader = new FileReader();
-                            const audioBase64 = await new Promise((resolve, reject) => {
-                                reader.onload = () => {
-                                    const result = reader.result;
-                                    // 移除data:audio/webm;base64,前缀
-                                    const base64Data = result.split(',')[1];
-                                    resolve(base64Data);
-                                };
-                                reader.onerror = reject;
-                                reader.readAsDataURL(window.lastAudioBlob);
-                            });
-                            
-
-                            // 发送JSON格式的请求
-                            const sttResponse = await fetch('/api/chat/stt', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    audio_data: audioBase64,
-                                    mime_type: 'audio/webm;codecs=opus'
-                                })
-                            });
-                            
-
-                            console.log('🎤 [语音识别] 收到STT响应，状态:', sttResponse.status);
-                            
-
-                            if (!sttResponse.ok) {
-                                const errorText = await sttResponse.text();
-                                console.error('🎤 [语音识别] STT错误响应:', errorText);
-                                throw new Error(`STT API error: ${sttResponse.status}`);
-                            }
-                            
-                            const sttResult = await sttResponse.json();
-                            console.log('🎤 [语音识别] STT原始响应:', sttResult);
-                            
-                            transcribedText = sttResult.text || '';
-                            
-                            const sttDuration = Date.now() - startTime;
-                            console.log('🎤 [语音识别] 语音识别耗时:', sttDuration, 'ms');
-                            console.log('🎤 [语音识别] 识别到的输入内容是:', transcribedText);
-                            
-                            // 如果识别结果为空，显示提示但不中断流程
-                            if (!transcribedText.trim()) {
-                                console.log('🎤 [语音识别] 识别结果为空，使用占位符');
-                                transcribedText = '[语音识别为空]';
-                            }
-                            
-                        } catch (error) {
-                            console.error('🎤 [语音识别] STT调用失败:', error);
-                            // STT失败时使用占位符文本，避免完全中断用户体验
-                            transcribedText = '[语音识别失败]';
-                        }
-                        
-                        // 更新语音消息的实际内容
-                        voiceMessage.content = transcribedText;
-                        console.log('🎤 [语音处理] 更新语音消息内容:', transcribedText);
-                        
-                        console.log('🎤 [AI对话] 发送请求到 /api/chat/next');
-                        const response = await fetch(`${API_BASE}/chat/next`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                history: history.value,
-                                model: selectedModel.value 
-                            })
-                        });
-                        
-                        console.log('🎤 [AI对话] 收到AI响应，正在处理...');
-                        const data = await response.json();
-                        
-                        // 🔑 关键：LLM响应后立即关闭loading，不等TTS
-                        isLoading.value = false;
-
-                        if (data.status === 'continue') {
-                            console.log('🎤 [AI对话] AI回复状态: continue (继续提问)');
-                            // AI 继续提问，可能包含选项
-                            const aiMessage = {
-                                role: 'assistant',
-                                content: data.question || data.content || '',
-                                options: data.options || [],
-                                selectedOptions: []
-                            };
-                            
-                            console.log('🎤 [TTS处理] 正在等待回复内容转为语音...');
-                            // 使用协调的TTS显示函数
-                            await displayAIMessageWithTTS(aiMessage);
-                            console.log('🎤 [TTS处理] 语音播放完成');
-                        } else if (data.status === 'stop') {
-                            console.log('🎤 [AI对话] AI回复状态: stop (开始诊断)');
-                            // AI 决定停止提问，开始诊断
-                            await generateDiagnosis();
-                        } else {
-                            console.error('🎤 [AI对话] AI回复状态: error -', data.message);
-                            const errorMessage = '抱歉，系统出错了，请重试。';
-                            const errorAIMessage = { role: 'assistant', content: errorMessage };
-                            
-                            console.log('🎤 [TTS处理] 正在等待错误消息转为语音...');
-                            // 使用协调的TTS显示函数显示错误消息
-                            await displayAIMessageWithTTS(errorAIMessage);
-                        }
-
-                    } catch (error) {
-                        console.error('🎤 [AI对话] 网络错误:', error);
-                        isLoading.value = false;  // 出错时也要关闭loading
-                        
-                        const errorMessage = '网络连接失败，请检查您的网络。';
-                        const errorAIMessage = { role: 'assistant', content: errorMessage };
-                        
-                        console.log('🎤 [TTS处理] 正在等待错误消息转为语音...');
-                        // 使用协调的TTS显示函数显示错误消息
-                        await displayAIMessageWithTTS(errorAIMessage);
-                    } finally {
-                        await scrollToBottom();
-                        console.log('🎤 [语音处理] 语音输入处理流程完成');
-                    }
-                };
-
-                // TTS功能：播放AI回复
-                const speakText = async (text) => {
-                    if (!isTTSEnabled.value || !text.trim()) return;
-                    
-                    // 停止之前的TTS播放
-                    stopTTS();
-                    
-                    try {
-                        // 调用后端TTS接口
-                        const response = await fetch('/api/chat/tts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: text })
-                        });
-                        
-                        if (!response.ok) {
-                            console.error('TTS API调用失败');
-                            return;
-                        }
-                        
-                        let audioBlob;
-                        const contentType = response.headers.get('content-type');
-                        
-                        if (contentType && contentType.includes('application/json')) {
-                            // Vercel服务器：处理base64编码的音频
-                            const result = await response.json();
-                            const audioBase64 = result.audio_data;
-                            if (audioBase64) {
-                                const audioBytes = atob(audioBase64);
-                                const audioArray = new Uint8Array(audioBytes.length);
-                                for (let i = 0; i < audioBytes.length; i++) {
-                                    audioArray[i] = audioBytes.charCodeAt(i);
-                                }
-                                audioBlob = new Blob([audioArray], { type: 'audio/mpeg' });
-                            }
-                        } else {
-                            // 本地server：直接使用blob响应
-                            audioBlob = await response.blob();
-                        }
-                        
-                        if (!audioBlob) {
-                            console.error('无法获取音频数据');
-                            return;
-                        }
-                        
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        currentAudioUrl.value = audioUrl;  // 跟踪当前URL
-                        
-                        // 播放音频
-                        const audio = new Audio(audioUrl);
-                        currentAudio.value = audio;  // 跟踪当前音频实例
-                        
-                        audio.play().catch(error => {
-                            console.error('音频播放失败:', error);
-                            currentAudio.value = null;
-                            currentAudioUrl.value = null;
-                        });
-                        
-                        // 清理URL对象和音频状态
-                        audio.onended = () => {
-                            URL.revokeObjectURL(audioUrl);
-                            currentAudio.value = null;
-                            currentAudioUrl.value = null;
-                        };
-                        
-                    } catch (error) {
-                        console.error('TTS功能出错:', error);
-                        currentAudio.value = null;
-                        currentAudioUrl.value = null;
-                    }
                 };
 
                 // 协调显示AI消息和播放TTS（真正的流式版本 - 使用Web Audio API）
@@ -2225,7 +1991,6 @@
                     getStepTypeColor,
                     getStepBorderColor,
                     handleCamera,
-                    handleVoice,
                     handleAdd,
                     isVoiceMode,
                     isRecording,
@@ -2237,8 +2002,6 @@
                     isTTSEnabled,
                     isTTSPlaying,
                     displayAIMessageWithTTS,
-                    speakText,
-                    processVoiceInput,
                     previewImageUrl,
                     pendingImages,
                     previewImage,

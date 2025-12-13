@@ -48,50 +48,6 @@ async def speech_to_text(audio_data: bytes, filename: str = "audio.webm", mime_t
     except Exception as e:
         raise Exception(f"Speech recognition failed: {str(e)}")
 
-async def text_to_speech(text: str) -> Dict[str, Any]:
-    """
-    文字转语音 - 使用豆包流式TTS（快速响应）
-    
-    Args:
-        text: 要转换的文本
-    
-    Returns:
-        {"audio_data": "base64编码的音频", "format": "mp3"}
-    """
-    try:
-        if not text.strip():
-            raise ValueError("Text cannot be empty")
-        
-        if len(text) > 2000:
-            raise ValueError("Text too long (max 2000 characters)")
-        
-        # 获取豆包凭证
-        app_id = os.getenv("DOUBAO_APP_ID", "9369539387")
-        access_key = os.getenv("DOUBAO_ACCESS_KEY", "EVHujvbAnGM-OW0T3WHHO1YF8ZHRzINa")
-        
-        # 创建豆包TTS客户端
-        tts_client = DoubaoStreamingTTS(
-            app_id=app_id,
-            access_key=access_key,
-            resource_id="seed-tts-1.0",
-            speaker="zh_female_tianxinxiaomei_emo_v2_mars_bigtts"
-        )
-        
-        # 合成完整音频
-        audio_content = await tts_client.synthesize_full(text.strip())
-        
-        # 编码为base64返回
-        audio_base64 = base64.b64encode(audio_content).decode('utf-8')
-        
-        return {
-            "audio_data": audio_base64,
-            "format": "mp3"
-        }
-            
-    except Exception as e:
-        raise Exception(f"Text-to-speech failed: {str(e)}")
-
-
 async def text_to_speech_stream(text: str) -> AsyncGenerator[bytes, None]:
     """
     文字转语音 - 流式版本（边生成边返回）
