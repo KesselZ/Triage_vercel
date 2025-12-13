@@ -67,7 +67,9 @@ async def chat_next(request: ChatRequest):
 @app.post("/api/chat/diagnose")
 async def chat_diagnose(request: ChatRequest):
     """诊断接口"""
+    print("🚀 [FastAPI/index.py] Diagnose endpoint called - using FastAPI route")
     result = await generate_diagnosis(request.history, request.model)
+    print("✅ [FastAPI/index.py] Diagnose completed successfully")
     return result
 
 @app.post("/api/chat/tts")
