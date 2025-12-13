@@ -12,6 +12,7 @@ def handler(request, response):
     """
     Vercel serverless function for chat next question
     """
+    print("⚡ [Serverless-next.py] /api/chat/next 被调用")
     # 设置CORS头
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'

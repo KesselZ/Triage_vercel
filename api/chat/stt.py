@@ -12,7 +12,7 @@ def handler(request, response):
     """
     Vercel serverless function for speech-to-text
     """
-    print("🔥 [SERVERLESS/stt.py] STT handler called - using Vercel serverless function")
+    print("⚡ [Serverless-stt.py] /api/chat/stt 被调用")
     # 设置CORS头
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'

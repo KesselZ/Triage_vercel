@@ -12,6 +12,7 @@ def handler(request, response):
     """
     Vercel serverless function for diagnosis
     """
+    print("⚡ [Serverless-diagnose.py] /api/chat/diagnose 被调用")
     # 设置CORS头
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'

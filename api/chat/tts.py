@@ -12,7 +12,7 @@ def handler(request, response):
     """
     Vercel serverless function for text-to-speech
     """
-    print("🔥 [SERVERLESS/tts.py] TTS handler called - using Vercel serverless function")
+    print("⚡ [Serverless-tts.py] /api/chat/tts 被调用")
     # 设置CORS头
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
@@ -64,7 +64,6 @@ def handler(request, response):
         audio_base64 = base64.b64encode(audio_content).decode('utf-8')
         
         response.status_code = 200
-        print("✅ [SERVERLESS/tts.py] TTS completed successfully")
         return json.dumps({
             "audio_data": audio_base64,
             "format": "mp3"
