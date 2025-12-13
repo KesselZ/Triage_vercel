@@ -1,25 +1,3 @@
 {
-  "version": 2,
-  "routes": [
-    {
-      "src": "/api/chat/stt",
-      "dest": "/api/chat/stt.py"
-    },
-    {
-      "src": "/api/chat/tts",
-      "dest": "/api/chat/tts.py"
-    },
-    {
-      "src": "/api/chat/next",
-      "dest": "/api/chat/next.py"
-    },
-    {
-      "src": "/api/chat/diagnose",
-      "dest": "/api/chat/diagnose.py"
-    },
-    {
-      "src": "/",
-      "dest": "/index.html"
-    }
-  ]
+  "version": 2
 }
